@@ -1,6 +1,7 @@
 package com.pnwrain.flashsocket
 {
 	import com.adobe.serialization.json.JSON;
+	import com.jimisaacs.data.URL;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
 	
 	import flash.events.Event;
@@ -14,9 +15,6 @@ package com.pnwrain.flashsocket
 	import flash.net.URLRequestMethod;
 	import flash.system.Security;
 	import flash.utils.Timer;
-	
-	import mx.collections.ArrayCollection;
-	import mx.utils.URLUtil;
 
 	public class FlashSocket extends EventDispatcher implements IWebSocketWrapper
 	{
@@ -48,17 +46,19 @@ package com.pnwrain.flashsocket
 			var httpProtocal:String = "http";
 			var webSocketProtocal:String = "ws";
 			
-			if (URLUtil.isHttpsURL(domain)) {
+			var URLUtil:URL = new URL(domain);
+			if (URLUtil.protocol == "https") {
 				httpProtocal = "https";
 				webSocketProtocal = "wss";
 			}
 			
 			//if the user passed in http:// or https:// we want to strip that out
 			if(domain.indexOf('://')>=0){
-				domain = URLUtil.getServerNameWithPort(domain);
+				domain = URLUtil.host;
 			}
 
 			this.socketURL = webSocketProtocal+"://" + domain + "/socket.io/1/flashsocket";
+			//this.socketURL = domain + "/socket.io/1/flashsocket";
 			this.callerUrl = httpProtocal+"://localhost/socket.swf";
 			
 			this.domain = domain;
@@ -68,7 +68,8 @@ package com.pnwrain.flashsocket
 			this.headers = headers;
 			
 			var r:URLRequest = new URLRequest();
-			r.url = httpProtocal+"://" + domain + "/socket.io/1/?time=" + new Date().getTime();
+			var now:Date = new Date();
+			r.url = httpProtocal+"://" + domain + "/socket.io/1/?time=" + now.getTime();
 			r.method = URLRequestMethod.POST;
 			var ul:URLLoader = new URLLoader(r);
 			ul.addEventListener(Event.COMPLETE, onDiscover);
@@ -154,14 +155,15 @@ package com.pnwrain.flashsocket
 		}
 		
 		protected function loadDefaultPolicyFile(wsUrl:String):void {
-			var policyUrl:String = "xmlsocket://" + URLUtil.getServerName(wsUrl) + ":843";
+			var URLUtil:URL = new URL(wsUrl);
+			var policyUrl:String = "xmlsocket://" + URLUtil.hostname + ":843";
 			log("policy file: " + policyUrl);
 			Security.loadPolicyFile(policyUrl);
 		}
 		
 		public function getOrigin():String {
-			return (URLUtil.getProtocol(this.callerUrl) + "://" +
-				URLUtil.getServerNameWithPort(this.callerUrl)).toLowerCase();
+			var URLUtil:URL = new URL(this.callerUrl);
+			return (URLUtil.protocol + "://" + URLUtil.host.toLowerCase());
 		}
 		
 		public function getCallerHost():String {
@@ -245,11 +247,11 @@ package com.pnwrain.flashsocket
 					break;
 				case '4':
 					var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.MESSAGE);
-					fe.data = JSON.decode(dm.msg);
+					fe.data = com.adobe.serialization.json.JSON.decode(dm.msg);
 					dispatchEvent(fe);
 					break;
 				case '5':
-					var m:Object = JSON.decode(dm.msg);
+					var m:Object = com.adobe.serialization.json.JSON.decode(dm.msg);
 					var e:FlashSocketEvent = new FlashSocketEvent(m.name);
 					e.data = m.args;
 					dispatchEvent(e);
@@ -257,7 +259,7 @@ package com.pnwrain.flashsocket
 				case '6':
 					var parts:Object =  this.ackRegexp.exec(dm.msg);
 					var id:int = int(parts[1]);
-					var args:Array = JSON.decode(parts[2]);
+					var args:Array = com.adobe.serialization.json.JSON.decode(parts[2]);
 					if (this.acks.hasOwnProperty(id)) {
 						var func:Function = this.acks[id] as Function;
 						//pass however many args the function is looking for back to it
@@ -323,12 +325,12 @@ package com.pnwrain.flashsocket
 					//webSocket.send(_encode(msg));
 					webSocket.send('3:'+messageId+'::' + msg as String);
 				}else if ( msg is Object ){
-					webSocket.send('4:'+messageId+'::' + JSON.encode(msg));
+					webSocket.send('4:'+messageId+'::' + com.adobe.serialization.json.JSON.encode(msg));
 				}else{
 					throw("Unsupported Message Type");
 				}
 			}else{
-				webSocket.send('5:'+messageId+'::' + JSON.encode({"name":event,"args":msg}));
+				webSocket.send('5:'+messageId+'::' + com.adobe.serialization.json.JSON.encode({"name":event,"args":msg}));
 			}
 		}
 		
