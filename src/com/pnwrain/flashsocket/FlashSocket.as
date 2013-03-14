@@ -295,7 +295,8 @@ package com.pnwrain.flashsocket
 			var type:String = arrMsg.length > 0 ? arrMsg[0] : "";
 			var id:String = arrMsg.length > 1 ? arrMsg[1] : null;
 			var endpoint:String = arrMsg.length > 2 ? arrMsg[2] : "";
-			var msg:String = arrMsg.length > 3 ? arrMsg[3] : null;
+			//this later portion won't work - the message could contain ':' - need to pull remaining array and rejoin
+			var msg:String = arrMsg.length > 3 ? arrMsg.slice(3).join(":") : null;
 			
 			return {type: type, msg: msg, id:id, endpoint:endpoint};
 		}
