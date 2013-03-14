@@ -36,6 +36,7 @@ package com.pnwrain.flashsocket
 		private var proxyPort:int;
 		private var headers:String;
 		private var timer:Timer;
+		private var channel:String = "";
 		
 		private var ackRegexp:RegExp = new RegExp('(\\d+)\\+(.*)');
 		private var ackId:int = 0;
@@ -53,9 +54,9 @@ package com.pnwrain.flashsocket
 			}
 			
 			//if the user passed in http:// or https:// we want to strip that out
-			if(domain.indexOf('://')>=0){
+			//if(domain.indexOf('://')>=0){
 				domain = URLUtil.host;
-			}
+			//}
 
 			this.socketURL = webSocketProtocal+"://" + domain + "/socket.io/1/flashsocket";
 			//this.socketURL = domain + "/socket.io/1/flashsocket";
@@ -66,6 +67,11 @@ package com.pnwrain.flashsocket
 			this.proxyHost = proxyHost;
 			this.proxyPort = proxyPort;
 			this.headers = headers;
+			this.channel = URLUtil.pathname || "";
+			
+			if(this.channel && this.channel.length > 0 && this.channel.indexOf("/") != 0){
+				this.channel = "/" + this.channel;
+			}
 			
 			var r:URLRequest = new URLRequest();
 			var now:Date = new Date();
@@ -142,6 +148,7 @@ package com.pnwrain.flashsocket
 		}
 		
 		protected function onConnect(event:Event):void{
+			trace("onConnect", this.channel);
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT);
 			dispatchEvent(fe);
 		}
@@ -235,7 +242,13 @@ package com.pnwrain.flashsocket
 					this._onDisconnect();
 					break;
 				case '1':
-					this._onConnect();
+					//check which channel we are on
+					if(dm.endpoint == this.channel){
+						this._onConnect();
+					}else{
+						//connect to the endpoint
+						webSocket.send('1::'+this.channel);
+					}
 					break;
 				case '2':
 					this._onHeartbeat();
@@ -277,12 +290,14 @@ package com.pnwrain.flashsocket
 			
 		}
 		protected function deFrame(message:String):Object{
-			var si:int = 0;
-			for ( var i5:int=0;i5<3;i5++){
-				si = message.indexOf(":",si+1);
-			}
-			var ds:String = message.substring(si+1,message.length);
-			return {type: message.substr(0, 1), msg: ds};
+			var arrMsg:Array = message is String ? message.split(":") : [];
+			
+			var type:String = arrMsg.length > 0 ? arrMsg[0] : "";
+			var id:String = arrMsg.length > 1 ? arrMsg[1] : null;
+			var endpoint:String = arrMsg.length > 2 ? arrMsg[2] : "";
+			var msg:String = arrMsg.length > 3 ? arrMsg[3] : null;
+			
+			return {type: type, msg: msg, id:id, endpoint:endpoint};
 		}
 		private function _decode(data:String):Array{
 			var messages:Array = [], number:*, n:*;
@@ -323,14 +338,14 @@ package com.pnwrain.flashsocket
 			if ( event == null ){
 				if ( msg is String){
 					//webSocket.send(_encode(msg));
-					webSocket.send('3:'+messageId+'::' + msg as String);
+					webSocket.send('3:'+messageId+':'+this.channel+':' + msg as String);
 				}else if ( msg is Object ){
-					webSocket.send('4:'+messageId+'::' + com.adobe.serialization.json.JSON.encode(msg));
+					webSocket.send('4:'+messageId+':'+this.channel+':' + com.adobe.serialization.json.JSON.encode(msg));
 				}else{
 					throw("Unsupported Message Type");
 				}
 			}else{
-				webSocket.send('5:'+messageId+'::' + com.adobe.serialization.json.JSON.encode({"name":event,"args":msg}));
+				webSocket.send('5:'+messageId+':'+this.channel+':' + com.adobe.serialization.json.JSON.encode({"name":event,"args":msg}));
 			}
 		}
 		
@@ -341,6 +356,8 @@ package com.pnwrain.flashsocket
 		private function _onConnect():void{
 			this.connected = true;
 			this.connecting = false;
+			//if we're on a specific channel then we need to tell the server to switch us over
+			
 			var e:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT);
 			dispatchEvent(e);
 		};
