@@ -1,6 +1,7 @@
 package com.pnwrain.flashsocket
 {
 	import com.adobe.serialization.json.JSON;
+	import com.demonsters.debugger.MonsterDebugger;
 	import com.jimisaacs.data.URL;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
 	
@@ -15,10 +16,10 @@ package com.pnwrain.flashsocket
 	import flash.net.URLRequestMethod;
 	import flash.system.Security;
 	import flash.utils.Timer;
-
+	
 	public class FlashSocket extends EventDispatcher implements IWebSocketWrapper
 	{
-		protected var debug:Boolean = false;
+		protected var debug:Boolean = true;
 		protected var callerUrl:String;
 		protected var socketURL:String;
 		protected var webSocket:WebSocket;
@@ -60,7 +61,7 @@ package com.pnwrain.flashsocket
 
 			this.socketURL = webSocketProtocal+"://" + domain + "/socket.io/1/flashsocket";
 			//this.socketURL = domain + "/socket.io/1/flashsocket";
-			this.callerUrl = httpProtocal+"://localhost/socket.swf";
+			this.callerUrl = httpProtocal+"://mobile-games.jimib.co.uk/pong.swf";
 			
 			this.domain = domain;
 			this.protocol = protocol;
@@ -85,6 +86,8 @@ package com.pnwrain.flashsocket
 		}
 		
 		protected function onDiscover(event:Event):void{
+			MonsterDebugger.trace(this, "onDiscover: "+event.type);
+			
 			var response:String = event.target.data;
 			var respData:Array = response.split(":");
 			sessionID = respData[0];
@@ -110,6 +113,7 @@ package com.pnwrain.flashsocket
 			
 		}
 		protected function onHandshake(event:Event):void{
+			MonsterDebugger.trace(this, "onHandshake: "+event.type);
 			
 			loadDefaultPolicyFile(socketURL);
 			webSocket = new WebSocket(this, socketURL, protocol, proxyHost, proxyPort, headers);
@@ -124,7 +128,9 @@ package com.pnwrain.flashsocket
 		}
 		
 		protected function onDiscoverError(event:Event):void{
+			MonsterDebugger.trace(this, "onDiscoverError: "+event.type);
 			if ( event is HTTPStatusEvent ){
+				MonsterDebugger.trace(this, "onDiscoverError status: "+(event as HTTPStatusEvent).status);
 				if ( (event as HTTPStatusEvent).status != 200){
 					//we were unsuccessful in connecting to server for discovery
 					var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT_ERROR);
@@ -133,6 +139,7 @@ package com.pnwrain.flashsocket
 			}
 		}
 		protected function onHandshakeError(event:Event):void{
+			MonsterDebugger.trace(this, "onHandshakeError: "+event.type);
 			if ( event is HTTPStatusEvent ){
 				if ( (event as HTTPStatusEvent).status != 200){
 					//we were unsuccessful in connecting to server for discovery
@@ -143,20 +150,23 @@ package com.pnwrain.flashsocket
 		}
 		
 		protected function onClose(event:Event):void{
+			MonsterDebugger.trace(this, "onClose" +  this.channel);
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CLOSE);
 			dispatchEvent(fe);
 		}
 		
 		protected function onConnect(event:Event):void{
-			trace("onConnect", this.channel);
+			MonsterDebugger.trace(this, "onConnect" +  this.channel);
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT);
 			dispatchEvent(fe);
 		}
 		protected function onIoError(event:Event):void{
+			MonsterDebugger.trace(this, "onIoError");
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.IO_ERROR);
 			dispatchEvent(fe);
 		}
 		protected function onSecurityError(event:Event):void{
+			MonsterDebugger.trace(this, "onSecurityError");
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.SECURITY_ERROR);
 			dispatchEvent(fe);
 		}
@@ -165,6 +175,7 @@ package com.pnwrain.flashsocket
 			var URLUtil:URL = new URL(wsUrl);
 			var policyUrl:String = "xmlsocket://" + URLUtil.hostname + ":843";
 			log("policy file: " + policyUrl);
+			
 			Security.loadPolicyFile(policyUrl);
 		}
 		
@@ -179,16 +190,19 @@ package com.pnwrain.flashsocket
 			//return URLUtil.getServerName(this.callerUrl);
 		}
 		public function log(message:String):void {
+			MonsterDebugger.trace(this, "log: " +  message);
 			if (debug) {
 				trace("webSocketLog: " + message);
 			}
 		}
 		
 		public function error(message:String):void {
+			MonsterDebugger.trace(this, "error: " +  message);
 			trace("webSocketError: "  + message);
 		}
 		
 		public function fatal(message:String):void {
+			MonsterDebugger.trace(this, "fatal: " +  message);
 			trace("webSocketError: " + message);
 		}
 		
@@ -224,6 +238,7 @@ package com.pnwrain.flashsocket
 		public var connecting:Boolean;
 		
 		private function _onMessage(message:String):void{
+			trace("_onMessage", message);
 			//https://github.com/LearnBoost/socket.io-spec#Encoding
 			/*	0		Disconnect
 				1::	Connect
@@ -246,8 +261,13 @@ package com.pnwrain.flashsocket
 					if(dm.endpoint == this.channel){
 						this._onConnect();
 					}else{
+						trace("Connecting to: "+'1::'+this.channel);
 						//connect to the endpoint
-						webSocket.send('1::'+this.channel);
+						try{
+							webSocket.send('1::'+this.channel);
+						}catch(err:Error){
+						
+						}
 					}
 					break;
 				case '2':
@@ -323,30 +343,38 @@ package com.pnwrain.flashsocket
 		}
 		
 		private function _onHeartbeat():void{
-			webSocket.send( '2::' ); // echo
+			try{
+				webSocket.send( '2::' ); // echo
+			}catch(err:Error){
+			
+			}
 		};
 		
 		public function send(msg:Object, event:String = null,callback:Function = null):void{
-			var messageId: String = "";
-			
-			if (null != callback) {
-				//%2B is urlencode(+)
-				messageId = this.ackId.toString() + '%2B';
-				this.acks[this.ackId] = callback;
-				this.ackId++;
-			}
-			
-			if ( event == null ){
-				if ( msg is String){
-					//webSocket.send(_encode(msg));
-					webSocket.send('3:'+messageId+':'+this.channel+':' + msg as String);
-				}else if ( msg is Object ){
-					webSocket.send('4:'+messageId+':'+this.channel+':' + com.adobe.serialization.json.JSON.encode(msg));
-				}else{
-					throw("Unsupported Message Type");
+			try{
+				var messageId: String = "";
+				
+				if (null != callback) {
+					//%2B is urlencode(+)
+					messageId = this.ackId.toString() + '%2B';
+					this.acks[this.ackId] = callback;
+					this.ackId++;
 				}
-			}else{
-				webSocket.send('5:'+messageId+':'+this.channel+':' + com.adobe.serialization.json.JSON.encode({"name":event,"args":msg}));
+				
+				if ( event == null ){
+					if ( msg is String){
+						//webSocket.send(_encode(msg));
+						webSocket.send('3:'+messageId+':'+this.channel+':' + msg as String);
+					}else if ( msg is Object ){
+						webSocket.send('4:'+messageId+':'+this.channel+':' + com.adobe.serialization.json.JSON.encode(msg));
+					}else{
+						throw("Unsupported Message Type");
+					}
+				}else{
+					webSocket.send('5:'+messageId+':'+this.channel+':' + com.adobe.serialization.json.JSON.encode({"name":event,"args":msg}));
+				}
+			}catch(err:Error){
+				trace("Unable to send message");
 			}
 		}
 		
