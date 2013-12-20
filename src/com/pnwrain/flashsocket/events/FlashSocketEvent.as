@@ -21,7 +21,9 @@ package com.pnwrain.flashsocket.events
 		
 		public override function clone():Event 
 		{ 
-			return new FlashSocketEvent(type, bubbles, cancelable);
+			var event:FlashSocketEvent = new FlashSocketEvent(type, bubbles, cancelable);
+			event.data = data;
+			return event;
 		} 
 		public override function toString():String 
 		{ 
