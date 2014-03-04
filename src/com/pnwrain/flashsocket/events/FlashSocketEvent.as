@@ -18,5 +18,16 @@ package com.pnwrain.flashsocket.events
 		{
 			super(type, bubbles, cancelable);
 		}
+		
+		public override function clone():Event 
+		{ 
+			var event:FlashSocketEvent = new FlashSocketEvent(type, bubbles, cancelable);
+			event.data = data;
+			return event;
+		} 
+		public override function toString():String 
+		{ 
+			return formatToString("FlashSocketEvent", "type", "bubbles", "cancelable", "eventPhase", "data"); 
+		}
 	}
 }
