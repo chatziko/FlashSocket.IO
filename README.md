@@ -6,7 +6,9 @@ The original project was only compatible with Flex and I needed a pure AS3 solut
 # CREDIT
 
 [https://github.com/simb/FlashSocket.IO](https://github.com/simb/FlashSocket.IO)
+
 [https://github.com/gimite/web-socket-js](https://github.com/gimite/web-socket-js)
+
 [http://jidd.jimisaacs.com/post/url-as3-class/](http://jidd.jimisaacs.com/post/url-as3-class/)
 
 # FlashSocket.IO
