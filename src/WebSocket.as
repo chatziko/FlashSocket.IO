@@ -99,7 +99,6 @@ public class WebSocket extends EventDispatcher {
     rawSocket.addEventListener(IOErrorEvent.IO_ERROR, onSocketIoError);
     rawSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSocketSecurityError);
     rawSocket.connect(host, port);
-	trace("connectint", host, port);
   }
   
   public function send(encData:String):int {
