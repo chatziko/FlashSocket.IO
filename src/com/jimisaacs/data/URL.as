@@ -79,7 +79,7 @@ package com.jimisaacs.data {
 			}
 			
 			var parts:Array = url.split('//');
-			_protocol = parts.shift();
+			_protocol = parts.shift().split(":")[0];
 			parts = parts[0].split('/');
 			// hostname - host - port
 			host = parts.shift();

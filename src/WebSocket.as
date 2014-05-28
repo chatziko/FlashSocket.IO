@@ -1,70 +1,96 @@
 // Copyright: Hiroshi Ichikawa <http://gimite.net/en/>
 // License: New BSD License
 // Reference: http://dev.w3.org/html5/websockets/
-// Reference: http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-76
+// Reference: http://tools.ietf.org/html/rfc6455
 
-package {
+package  {
+
+import com.adobe.net.proxies.RFC2817Socket;
+import com.gsolo.encryption.SHA1;
+import com.hurlant.crypto.tls.TLSConfig;
+import com.hurlant.crypto.tls.TLSEngine;
+import com.hurlant.crypto.tls.TLSSecurityParameters;
+import com.hurlant.crypto.tls.TLSSocket;
 
 import flash.display.*;
+import flash.errors.*;
 import flash.events.*;
 import flash.external.*;
 import flash.net.*;
 import flash.system.*;
 import flash.utils.*;
-import mx.core.*;
+
 import mx.controls.*;
+import mx.core.*;
 import mx.events.*;
 import mx.utils.*;
-import com.adobe.net.proxies.RFC2817Socket;
-import com.hurlant.crypto.tls.TLSSocket;
-import com.hurlant.crypto.tls.TLSConfig;
-import com.hurlant.crypto.tls.TLSEngine;
-import com.hurlant.crypto.tls.TLSSecurityParameters;
-import com.gsolo.encryption.MD5;
 
-[Event(name="event", type="flash.events.Event")]
 public class WebSocket extends EventDispatcher {
   
-  private static var CONNECTING:int = 0;
-  private static var OPEN:int = 1;
-  private static var CLOSING:int = 2;
-  private static var CLOSED:int = 3;
+  private static const WEB_SOCKET_GUID:String = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
   
-  private var rawSocket:Socket;
-  private var tlsSocket:TLSSocket;
-  private var tlsConfig:TLSConfig;
-  private var socket:Socket;
-  private var main:IWebSocketWrapper;
+  private static const CONNECTING:int = 0;
+  private static const OPEN:int = 1;
+  private static const CLOSING:int = 2;
+  private static const CLOSED:int = 3;
+  
+  private static const OPCODE_CONTINUATION:int = 0x00;
+  private static const OPCODE_TEXT:int = 0x01;
+  private static const OPCODE_BINARY:int = 0x02;
+  private static const OPCODE_CLOSE:int = 0x08;
+  private static const OPCODE_PING:int = 0x09;
+  private static const OPCODE_PONG:int = 0x0a;
+  
+  private static const STATUS_NORMAL_CLOSURE:int = 1000;
+  private static const STATUS_NO_CODE:int = 1005;
+  private static const STATUS_CLOSED_ABNORMALLY:int = 1006;
+  private static const STATUS_CONNECTION_ERROR:int = 5000;
+  
+  private var id:int;
   private var url:String;
   private var scheme:String;
   private var host:String;
   private var port:uint;
   private var path:String;
   private var origin:String;
-  private var protocol:String;
+  private var requestedProtocols:Array;
+  private var cookie:String;
+  private var headers:String;
+  
+  private var rawSocket:Socket;
+  private var tlsSocket:TLSSocket;
+  private var tlsConfig:TLSConfig;
+  private var socket:Socket;
+  
+  private var acceptedProtocol:String;
+  private var expectedDigest:String;
+  
   private var buffer:ByteArray = new ByteArray();
-  private var eventQueue:Array = [];
+  private var fragmentsBuffer:ByteArray = null;
   private var headerState:int = 0;
   private var readyState:int = CONNECTING;
-  private var headers:String;
-  private var noiseChars:Array;
-  private var expectedDigest:String;
-
+  
+  private var logger:IWebSocketLogger;
+  private var base64Encoder:Base64Encoder = new Base64Encoder();
+  
   public function WebSocket(
-      main:IWebSocketWrapper, url:String, protocol:String,
-      proxyHost:String = null, proxyPort:int = 0,
-      headers:String = null) {
-    this.main = main;
-    initNoiseChars();
-	this.url = url;
-	var m:Array = url.match(/^(\w+):\/\/([^\/:]+)(:(\d+))?(\/.*)?$/);
-    if (!m) main.fatal("SYNTAX_ERR: invalid url: " + url);
+      id:int, url:String, protocols:Array, origin:String,
+      proxyHost:String, proxyPort:int,
+      cookie:String, headers:String,
+      logger:IWebSocketLogger) {
+    this.logger = logger;
+    this.id = id;
+    this.url = url;
+    var m:Array = url.match(/^(\w+):\/\/([^\/:]+)(:(\d+))?(\/.*)?(\?.*)?$/);
+    if (!m) fatal("SYNTAX_ERR: invalid url: " + url);
     this.scheme = m[1];
     this.host = m[2];
-    this.port = parseInt(m[4] || "80");
-    this.path = m[5] || "/";
-    this.origin = main.getOrigin();
-    this.protocol = protocol;
+    var defaultPort:int = scheme == "wss" ? 443 : 80;
+    this.port = parseInt(m[4]) || defaultPort;
+    this.path = (m[5] || "/") + (m[6] || "");
+    this.origin = origin;
+    this.requestedProtocols = protocols;
+    this.cookie = cookie;
     // if present and not the empty string, headers MUST end with \r\n
     // headers should be zero or more complete lines, for example
     // "Header1: xxx\r\nHeader2: yyyy\r\n"
@@ -72,7 +98,7 @@ public class WebSocket extends EventDispatcher {
     
     if (proxyHost != null && proxyPort != 0){
       if (scheme == "wss") {
-        main.fatal("wss with proxy is not supported");
+        fatal("wss with proxy is not supported");
       }
       var proxySocket:RFC2817Socket = new RFC2817Socket();
       proxySocket.setProxyInfo(proxyHost, proxyPort);
@@ -101,117 +127,170 @@ public class WebSocket extends EventDispatcher {
     rawSocket.connect(host, port);
   }
   
+  /**
+   * @return  This WebSocket's ID.
+   */
+  public function getId():int {
+    return this.id;
+  }
+  
+  /**
+   * @return this WebSocket's readyState.
+   */
+  public function getReadyState():int {
+    return this.readyState;
+  }
+
+  public function getAcceptedProtocol():String {
+    return this.acceptedProtocol;
+  }
+  
   public function send(encData:String):int {
-    var data:String = decodeURIComponent(encData);
+    var data:String;
+    try {
+      data = decodeURIComponent(encData);
+    } catch (ex:URIError) {
+      logger.error("SYNTAX_ERR: URIError in send()");
+      return 0;
+    }
+    logger.log("send: " + data);
+    var dataBytes:ByteArray = new ByteArray();
+    dataBytes.writeUTFBytes(data);
     if (readyState == OPEN) {
-      socket.writeByte(0x00);
-      socket.writeUTFBytes(data);
-      socket.writeByte(0xff);
-      socket.flush();
-      main.log("sent: " + data);
-      return -1;
+      var frame:WebSocketFrame = new WebSocketFrame();
+      frame.opcode = OPCODE_TEXT;
+      frame.payload = dataBytes;
+      if (sendFrame(frame)) {
+        return -1;
+      } else {
+        return dataBytes.length;
+      }
     } else if (readyState == CLOSING || readyState == CLOSED) {
-      var bytes:ByteArray = new ByteArray();
-      bytes.writeUTFBytes(data);
-      return bytes.length; // not sure whether it should include \x00 and \xff
+      return dataBytes.length;
     } else {
-      main.fatal("invalid state");
+      fatal("invalid state");
       return 0;
     }
   }
   
-  public function close():void {
-    main.log("close");
-    eventQueue = [];
+  public function close(
+      code:int = STATUS_NO_CODE, reason:String = "", origin:String = "client"):void {
+    if (code != STATUS_NORMAL_CLOSURE &&
+        code != STATUS_NO_CODE &&
+        code != STATUS_CONNECTION_ERROR) {
+      logger.error(StringUtil.substitute(
+          "Fail connection by {0}: code={1} reason={2}", origin, code, reason));
+    }
+    var closeConnection:Boolean =
+        code == STATUS_CONNECTION_ERROR || origin == "server";
     try {
-      if (readyState == OPEN) {
-        socket.writeByte(0xff);
-        socket.writeByte(0x00);
-        socket.flush();
+      if (readyState == OPEN && code != STATUS_CONNECTION_ERROR) {
+        var frame:WebSocketFrame = new WebSocketFrame();
+        frame.opcode = OPCODE_CLOSE;
+        frame.payload = new ByteArray();
+        if (origin == "client" && code != STATUS_NO_CODE) {
+          frame.payload.writeShort(code);
+          frame.payload.writeUTFBytes(reason);
+        }
+        sendFrame(frame);
       }
-      socket.close();
-    } catch (ex:Error) { }
-    readyState = CLOSED;
-    // We don't fire any events here because it causes weird error:
-    // > You are trying to call recursively into the Flash Player which is not allowed.
-    // We do something equivalent in JavaScript WebSocket#close instead.
+      if (closeConnection) {
+        socket.close();
+      }
+    } catch (ex:Error) {
+      logger.error("Error: " + ex.message);
+    }
+    if (closeConnection) {
+      logger.log("closed");
+      var fireErrorEvent:Boolean = readyState != CONNECTING && code == STATUS_CONNECTION_ERROR;
+      readyState = CLOSED;
+      if (fireErrorEvent) {
+        dispatchEvent(new WebSocketEvent("error"));
+      }
+      var wasClean:Boolean = code != STATUS_CLOSED_ABNORMALLY && code != STATUS_CONNECTION_ERROR;
+      var eventCode:int = code == STATUS_CONNECTION_ERROR ? STATUS_CLOSED_ABNORMALLY : code;
+      dispatchCloseEvent(wasClean, eventCode, reason);
+    } else {
+      logger.log("closing");
+      readyState = CLOSING;
+    }
   }
   
   private function onSocketConnect(event:Event):void {
-    main.log("connected");
+    logger.log("connected");
 
     if (scheme == "wss") {
-      main.log("starting SSL/TLS");
+      logger.log("starting SSL/TLS");
       tlsSocket.startTLS(rawSocket, host, tlsConfig);
     }
     
-    var hostValue:String = host + (port == 80 ? "" : ":" + port);
-    var cookie:String = "";
-    if (main.getCallerHost() == host) {
-      cookie = ExternalInterface.call("function(){return document.cookie}");
-    }
-    var key1:String = generateKey();
-    var key2:String = generateKey();
-    var key3:String = generateKey3();
-    expectedDigest = getSecurityDigest(key1, key2, key3);
+    var defaultPort:int = scheme == "wss" ? 443 : 80;
+    var hostValue:String = host + (port == defaultPort ? "" : ":" + port);
+    var key:String = generateKey();
+
+    SHA1.b64pad = "=";
+    expectedDigest = SHA1.b64_sha1(key + WEB_SOCKET_GUID);
+
     var opt:String = "";
-    if (protocol) opt += "WebSocket-Protocol: " + protocol + "\r\n";
+    if (requestedProtocols.length > 0) {
+      opt += "Sec-WebSocket-Protocol: " + requestedProtocols.join(",") + "\r\n";
+    }
     // if caller passes additional headers they must end with "\r\n"
     if (headers) opt += headers;
     
     var req:String = StringUtil.substitute(
       "GET {0} HTTP/1.1\r\n" +
-      "Upgrade: WebSocket\r\n" +
-      "Connection: Upgrade\r\n" +
       "Host: {1}\r\n" +
-      "Origin: {2}\r\n" +
-      "Cookie: {3}\r\n" +
-      "Sec-WebSocket-Key1: {4}\r\n" +
-      "Sec-WebSocket-Key2: {5}\r\n" +
-      "{6}" +
+      "Upgrade: websocket\r\n" +
+      "Connection: Upgrade\r\n" +
+      "Sec-WebSocket-Key: {2}\r\n" +
+      "Origin: {3}\r\n" +
+      "Sec-WebSocket-Version: 13\r\n" +
+      "Cookie: {4}\r\n" +
+      "{5}" +
       "\r\n",
-      path, hostValue, origin, cookie, key1, key2, opt);
-    main.log("request header:\n" + req);
+      path, hostValue, key, origin, cookie, opt);
+    logger.log("request header:\n" + req);
     socket.writeUTFBytes(req);
-    main.log("sent key3: " + key3);
-    writeBytes(key3);
     socket.flush();
   }
 
   private function onSocketClose(event:Event):void {
-    main.log("closed");
+    logger.log("closed");
     readyState = CLOSED;
-    fireEvent({type: "close"}, true);
+    dispatchCloseEvent(false, STATUS_CLOSED_ABNORMALLY, "");
   }
 
   private function onSocketIoError(event:IOErrorEvent):void {
     var message:String;
     if (readyState == CONNECTING) {
-      message = "cannot connect to Web Socket server at " + url + " (IoError)";
+      message = "cannot connect to Web Socket server at " + url + " (IoError: " + event.text + ")";
     } else {
-      message = "error communicating with Web Socket server at " + url + " (IoError)";
+      message =
+          "error communicating with Web Socket server at " + url +
+          " (IoError: " + event.text + ")";
     }
-    onError(message);
+    onConnectionError(message);
   }
 
   private function onSocketSecurityError(event:SecurityErrorEvent):void {
     var message:String;
     if (readyState == CONNECTING) {
       message =
-          "cannot connect to Web Socket server at " + url + " (SecurityError)\n" +
+          "cannot connect to Web Socket server at " + url + " (SecurityError: " + event.text + ")\n" +
           "make sure the server is running and Flash socket policy file is correctly placed";
     } else {
-      message = "error communicating with Web Socket server at " + url + " (SecurityError)";
+      message =
+          "error communicating with Web Socket server at " + url +
+          " (SecurityError: " + event.text + ")";
     }
-    onError(message);
+    onConnectionError(message);
   }
   
-  private function onError(message:String):void {
-    var state:int = readyState;
-    if (state == CLOSED) return;
-    main.error(message);
-    close();
-    fireEvent({type: state == CONNECTING ? "close" : "error"}, true);
+  private function onConnectionError(message:String):void {
+    if (readyState == CLOSED) return;
+    logger.error(message);
+    close(STATUS_CONNECTION_ERROR);
   }
 
   private function onSocketData(event:ProgressEvent):void {
@@ -229,104 +308,264 @@ public class WebSocket extends EventDispatcher {
         }
         if (headerState == 4) {
           var headerStr:String = readUTFBytes(buffer, 0, pos + 1);
-          main.log("response header:\n" + headerStr);
-          if (!validateHeader(headerStr)) return;
-          removeBufferBefore(pos + 1);
-          pos = -1;
-        }
-      } else if (headerState == 4) {
-        if (pos == 15) {
-          var replyDigest:String = readBytes(buffer, 0, 16);
-          main.log("reply digest: " + replyDigest);
-          if (replyDigest != expectedDigest) {
-            onError("digest doesn't match: " + replyDigest + " != " + expectedDigest);
-            return;
-          }
-          headerState = 5;
+          logger.log("response header:\n" + headerStr);
+          if (!validateHandshake(headerStr)) return;
           removeBufferBefore(pos + 1);
           pos = -1;
           readyState = OPEN;
-          fireEvent({type: "open"}, true);
+          this.dispatchEvent(new WebSocketEvent("open"));
         }
       } else {
-        if (buffer[pos] == 0xff && pos > 0) {
-          if (buffer[0] != 0x00) {
-            onError("data must start with \\x00");
-            return;
+        var frame:WebSocketFrame = parseFrame();
+        if (frame) {
+          removeBufferBefore(frame.length);
+          pos = -1;
+          if (frame.rsv != 0) {
+            close(1002, "RSV must be 0.");
+          } else if (frame.mask) {
+            close(1002, "Frame from server must not be masked.");
+          } else if (frame.opcode >= 0x08 && frame.opcode <= 0x0f && frame.payload.length >= 126) {
+            close(1004, "Payload of control frame must be less than 126 bytes.");
+          } else {
+            switch (frame.opcode) {
+              case OPCODE_CONTINUATION:
+                if (fragmentsBuffer == null) {
+                  close(1002, "Unexpected continuation frame");
+                } else {
+                  fragmentsBuffer.writeBytes(frame.payload);
+                  if (frame.fin) {
+                    data = readUTFBytes(fragmentsBuffer, 0, fragmentsBuffer.length);
+                    try {
+                      this.dispatchEvent(new WebSocketEvent("message", encodeURIComponent(data)));
+                    } catch (ex:URIError) {
+                      close(1007, "URIError while encoding the received data.");
+                    }
+                    fragmentsBuffer = null;
+                  }
+                }
+                break;
+              case OPCODE_TEXT:
+                if (frame.fin) {
+                var data:String = readUTFBytes(frame.payload, 0, frame.payload.length);
+                try {
+                  this.dispatchEvent(new WebSocketEvent("message", encodeURIComponent(data)));
+                } catch (ex:URIError) {
+                  close(1007, "URIError while encoding the received data.");
+                }
+                } else {
+                  fragmentsBuffer = new ByteArray();
+                  fragmentsBuffer.writeBytes(frame.payload);
+                }
+                break;
+              case OPCODE_BINARY:
+                // See https://github.com/gimite/web-socket-js/pull/89
+                // for discussion about supporting binary data.
+                close(1003, "Received binary data, which is not supported.");
+                break;
+              case OPCODE_CLOSE:
+                // Extracts code and reason string.
+                var code:int = STATUS_NO_CODE;
+                var reason:String = "";
+                if (frame.payload.length >= 2) {
+                  frame.payload.endian = Endian.BIG_ENDIAN;
+                  frame.payload.position = 0;
+                  code = frame.payload.readUnsignedShort();
+                  reason = readUTFBytes(frame.payload, 2, frame.payload.length - 2);
+                }
+                logger.log("received closing frame");
+                close(code, reason, "server");
+                break;
+              case OPCODE_PING:
+                sendPong(frame.payload);
+                break;
+              case OPCODE_PONG:
+                break;
+              default:
+                close(1002, "Received unknown opcode: " + frame.opcode);
+                break;
+            }
           }
-          var data:String = readUTFBytes(buffer, 1, pos - 1);
-          main.log("received: " + data);
-          fireEvent({type: "message", data: encodeURIComponent(data)}, false);
-          removeBufferBefore(pos + 1);
-          pos = -1;
-        } else if (pos == 1 && buffer[0] == 0xff && buffer[1] == 0x00) { // closing
-          main.log("received closing packet");
-          removeBufferBefore(pos + 1);
-          pos = -1;
-          close();
-          fireEvent({type: "close"}, true);
         }
       }
     }
   }
-
-  public function receiveEvents():Array {
-    var q:Array = eventQueue;
-    eventQueue = [];
-    return q;
-  }
   
-  private function validateHeader(headerStr:String):Boolean {
+  private function validateHandshake(headerStr:String):Boolean {
     var lines:Array = headerStr.split(/\r\n/);
     if (!lines[0].match(/^HTTP\/1.1 101 /)) {
-      onError("bad response: " + lines[0]);
+      onConnectionError("bad response: " + lines[0]);
       return false;
     }
     var header:Object = {};
     var lowerHeader:Object = {};
     for (var i:int = 1; i < lines.length; ++i) {
       if (lines[i].length == 0) continue;
-      var m:Array = lines[i].match(/^(\S+): (.*)$/);
+      var m:Array = lines[i].match(/^(\S+):(.*)$/);
       if (!m) {
-        onError("failed to parse response header line: " + lines[i]);
+        onConnectionError("failed to parse response header line: " + lines[i]);
         return false;
       }
-      header[m[1].toLowerCase()] = m[2];
-      lowerHeader[m[1].toLowerCase()] = m[2].toLowerCase();
+      var key:String = m[1].toLowerCase();
+      var value:String = StringUtil.trim(m[2]);
+      header[key] = value;
+      lowerHeader[key] = value.toLowerCase();
     }
     if (lowerHeader["upgrade"] != "websocket") {
-      onError("invalid Upgrade: " + header["Upgrade"]);
+      onConnectionError("invalid Upgrade: " + header["Upgrade"]);
       return false;
     }
     if (lowerHeader["connection"] != "upgrade") {
-      onError("invalid Connection: " + header["Connection"]);
+      onConnectionError("invalid Connection: " + header["Connection"]);
       return false;
     }
-    if (!lowerHeader["sec-websocket-origin"]) {
-      if (lowerHeader["websocket-origin"]) {
-        onError(
-          "The WebSocket server speaks old WebSocket protocol, " +
-          "which is not supported by web-socket-js. " +
-          "It requires WebSocket protocol 76 or later. " +
-          "Try newer version of the server if available.");
-      } else {
-        onError("header Sec-WebSocket-Origin is missing");
+    if (!lowerHeader["sec-websocket-accept"]) {
+      onConnectionError(
+        "The WebSocket server speaks old WebSocket protocol, " +
+        "which is not supported by web-socket-js. " +
+        "It requires WebSocket protocol HyBi 10. " +
+        "Try newer version of the server if available.");
+      return false;
+    }
+    var replyDigest:String = header["sec-websocket-accept"]
+    if (replyDigest != expectedDigest) {
+      onConnectionError("digest doesn't match: " + replyDigest + " != " + expectedDigest);
+      return false;
+    }
+    if (requestedProtocols.length > 0) {
+      acceptedProtocol = header["sec-websocket-protocol"];
+      if (requestedProtocols.indexOf(acceptedProtocol) < 0) {
+        onConnectionError("protocol doesn't match: '" +
+          acceptedProtocol + "' not in '" + requestedProtocols.join(",") + "'");
+        return false;
       }
-      return false;
-    }
-    var resOrigin:String = lowerHeader["sec-websocket-origin"];
-    if (resOrigin != origin) {
-      onError("origin doesn't match: '" + resOrigin + "' != '" + origin + "'");
-      return false;
-    }
-    if (protocol && header["sec-websocket-protocol"] != protocol) {
-      onError("protocol doesn't match: '" +
-        header["websocket-protocol"] + "' != '" + protocol + "'");
-      return false;
     }
     return true;
   }
 
+  private function sendPong(payload:ByteArray):Boolean {
+    var frame:WebSocketFrame = new WebSocketFrame();
+    frame.opcode = OPCODE_PONG;
+    frame.payload = payload;
+    return sendFrame(frame);
+  }
+  
+  private function sendFrame(frame:WebSocketFrame):Boolean {
+    
+    var plength:uint = frame.payload.length;
+    
+    // Generates a mask.
+    var mask:ByteArray = new ByteArray();
+    for (var i:int = 0; i < 4; i++) {
+      mask.writeByte(randomInt(0, 255));
+    }
+    
+    var header:ByteArray = new ByteArray();
+    // FIN + RSV + opcode
+    header.writeByte((frame.fin ? 0x80 : 0x00) | (frame.rsv << 4) | frame.opcode);
+    if (plength <= 125) {
+      header.writeByte(0x80 | plength);  // Masked + length
+    } else if (plength > 125 && plength < 65536) {
+      header.writeByte(0x80 | 126);  // Masked + 126
+      header.writeShort(plength);
+    } else if (plength >= 65536 && plength < 4294967296) {
+      header.writeByte(0x80 | 127);  // Masked + 127
+      header.writeUnsignedInt(0);  // zero high order bits
+      header.writeUnsignedInt(plength);
+    } else {
+      fatal("Send frame size too large");
+    }
+    header.writeBytes(mask);
+    
+    var maskedPayload:ByteArray = new ByteArray();
+    maskedPayload.length = frame.payload.length;
+    for (i = 0; i < frame.payload.length; i++) {
+      maskedPayload[i] = mask[i % 4] ^ frame.payload[i];
+    }
+
+    try {
+      socket.writeBytes(header);
+      socket.writeBytes(maskedPayload);
+      socket.flush();
+    } catch (ex:Error) {
+      logger.error("Error while sending frame: " + ex.message);
+      setTimeout(function():void {
+        if (readyState != CLOSED) {
+          close(STATUS_CONNECTION_ERROR);
+        }
+      }, 0);
+      return false;
+    }
+    return true;
+    
+  }
+
+  private function parseFrame():WebSocketFrame {
+    
+    var frame:WebSocketFrame = new WebSocketFrame();
+    var hlength:uint = 0;
+    var plength:uint = 0;
+    
+    hlength = 2;
+    if (buffer.length < hlength) {
+      return null;
+    }
+
+    frame.fin = (buffer[0] & 0x80) != 0;
+    frame.rsv = (buffer[0] & 0x70) >> 4;
+    frame.opcode  = buffer[0] & 0x0f;
+    // Payload unmasking is not implemented because masking frames from server
+    // is not allowed. This field is used only for error checking.
+    frame.mask = (buffer[1] & 0x80) != 0;
+    plength = buffer[1] & 0x7f;
+
+    if (plength == 126) {
+      
+      hlength = 4;
+      if (buffer.length < hlength) {
+        return null;
+      }
+      buffer.endian = Endian.BIG_ENDIAN;
+      buffer.position = 2;
+      plength = buffer.readUnsignedShort();
+      
+    } else if (plength == 127) {
+      
+      hlength = 10;
+      if (buffer.length < hlength) {
+        return null;
+      }
+      buffer.endian = Endian.BIG_ENDIAN;
+      buffer.position = 2;
+      // Protocol allows 64-bit length, but we only handle 32-bit
+      var big:uint = buffer.readUnsignedInt(); // Skip high 32-bits
+      plength = buffer.readUnsignedInt(); // Low 32-bits
+      if (big != 0) {
+        fatal("Frame length exceeds 4294967295. Bailing out!");
+        return null;
+      }
+      
+    }
+
+    if (buffer.length < hlength + plength) {
+      return null;
+    }
+    
+    frame.length = hlength + plength;
+    frame.payload = new ByteArray();
+    buffer.position = hlength;
+    buffer.readBytes(frame.payload, 0, plength);
+    return frame;
+    
+  }
+  
+  private function dispatchCloseEvent(wasClean:Boolean, code:int, reason:String):void {
+    var event:WebSocketEvent = new WebSocketEvent("close");
+    event.wasClean = wasClean;
+    event.code = code;
+    event.reason = reason;
+    dispatchEvent(event);
+  }
+  
   private function removeBufferBefore(pos:int):void {
     if (pos == 0) return;
     var nextBuffer:ByteArray = new ByteArray();
@@ -335,89 +574,15 @@ public class WebSocket extends EventDispatcher {
     buffer = nextBuffer;
   }
   
-  private function fireEvent(event:Object, stateChanged:Boolean):void {
-    if (stateChanged) {
-      event.readyState = readyState;
-    }
-    eventQueue.push(event);
-    dispatchEvent(new Event("event"));
-  }
-  
-  private function initNoiseChars():void {
-    noiseChars = new Array();
-    for (var i:int = 0x21; i <= 0x2f; ++i) {
-      noiseChars.push(String.fromCharCode(i));
-    }
-    for (var j:int = 0x3a; j <= 0x7a; ++j) {
-      noiseChars.push(String.fromCharCode(j));
-    }
-  }
-  
   private function generateKey():String {
-    var spaces:uint = randomInt(1, 12);
-    var max:uint = uint.MAX_VALUE / spaces;
-    var number:uint = randomInt(0, max);
-    var key:String = (number * spaces).toString();
-    var noises:int = randomInt(1, 12);
-    var pos:int;
-    for (var i:int = 0; i < noises; ++i) {
-      var char:String = noiseChars[randomInt(0, noiseChars.length - 1)];
-      pos = randomInt(0, key.length);
-      key = key.substr(0, pos) + char + key.substr(pos);
+    var vals:ByteArray = new ByteArray();
+    vals.length = 16;
+    for (var i:int = 0; i < vals.length; ++i) {
+        vals[i] = randomInt(0, 127);
     }
-    for (var j:int = 0; j < spaces; ++j) {
-      pos = randomInt(1, key.length - 1);
-      key = key.substr(0, pos) + " " + key.substr(pos);
-    }
-    return key;
-  }
-  
-  private function generateKey3():String {
-    var key3:String = "";
-    for (var i:int = 0; i < 8; ++i) {
-      key3 += String.fromCharCode(randomInt(0, 255));
-    }
-    return key3;
-  }
-  
-  private function getSecurityDigest(key1:String, key2:String, key3:String):String {
-    var bytes1:String = keyToBytes(key1);
-    var bytes2:String = keyToBytes(key2);
-    return MD5.rstr_md5(bytes1 + bytes2 + key3);
-  }
-  
-  private function keyToBytes(key:String):String {
-    var keyNum:uint = parseInt(key.replace(/[^\d]/g, ""));
-    var spaces:uint = 0;
-    for (var i:int = 0; i < key.length; ++i) {
-      if (key.charAt(i) == " ") ++spaces;
-    }
-    var resultNum:uint = keyNum / spaces;
-    var bytes:String = "";
-    for (var j:int = 3; j >= 0; --j) {
-      bytes += String.fromCharCode((resultNum >> (j * 8)) & 0xff);
-    }
-    return bytes;
-  }
-  
-  // Writes byte sequence to socket.
-  // bytes is String in special format where bytes[i] is i-th byte, not i-th character.
-  private function writeBytes(bytes:String):void {
-    for (var i:int = 0; i < bytes.length; ++i) {
-      socket.writeByte(bytes.charCodeAt(i));
-    }
-  }
-  
-  // Reads specified number of bytes from buffer, and returns it as special format String
-  // where bytes[i] is i-th byte (not i-th character).
-  private function readBytes(buffer:ByteArray, start:int, numBytes:int):String {
-    buffer.position = start;
-    var bytes:String = "";
-    for (var i:int = 0; i < numBytes; ++i) {
-      // & 0xff is to make \x80-\xff positive number.
-      bytes += String.fromCharCode(buffer.readByte() & 0xff);
-    }
-    return bytes;
+    base64Encoder.reset();
+    base64Encoder.encodeBytes(vals);
+    return base64Encoder.toString();
   }
   
   private function readUTFBytes(buffer:ByteArray, start:int, numBytes:int):String {
@@ -437,16 +602,12 @@ public class WebSocket extends EventDispatcher {
   private function randomInt(min:uint, max:uint):uint {
     return min + Math.floor(Math.random() * (Number(max) - min + 1));
   }
-
-  // for debug
-  private function dumpBytes(bytes:String):void {
-    var output:String = "";
-    for (var i:int = 0; i < bytes.length; ++i) {
-      output += bytes.charCodeAt(i).toString() + ", ";
-    }
-    main.log(output);
-  }
   
+  private function fatal(message:String):void {
+    logger.error(message);
+    throw message;
+  }
+
 }
 
 }

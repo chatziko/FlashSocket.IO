@@ -3,6 +3,7 @@ package com.pnwrain.flashsocket
 	import com.adobe.serialization.json.JSON;
 	import com.jimisaacs.data.URL;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
+	import flash.events.IEventDispatcher;
 	
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
@@ -16,8 +17,10 @@ package com.pnwrain.flashsocket
 	import flash.system.Security;
 	import flash.utils.Timer;
 	
-	public class FlashSocket extends EventDispatcher implements IWebSocketWrapper
+	public class FlashSocket implements IWebSocketWrapper, IWebSocketLogger, IEventDispatcher
 	{
+		static private var id:int = 0;
+		
 		protected var debug:Boolean = true;
 		protected var callerUrl:String;
 		protected var socketURL:String;
@@ -29,6 +32,7 @@ package com.pnwrain.flashsocket
 		protected var connectionClosingTimeout:int;
 		protected var protocols:Array;
 		
+		private var _eventDispatcher:IEventDispatcher = new EventDispatcher();
 		//hold over variables from constructor for discover to use
 		private var domain:String;
 		private var protocol:String;
@@ -82,6 +86,10 @@ package com.pnwrain.flashsocket
 			ul.addEventListener(IOErrorEvent.IO_ERROR , onDiscoverError);
 		}
 		
+		
+		/* INTERFACE flash.events.IEventDispatcher */
+		
+		
 		protected function getConnectionUrl(httpProtocal:String, domain:String):String
 		{
 			return httpProtocal+"://" + domain + "/socket.io/1/?time=" + new Date().getTime();
@@ -114,8 +122,11 @@ package com.pnwrain.flashsocket
 		}
 		protected function onHandshake(event:Event):void{
 			loadDefaultPolicyFile(socketURL);
-			webSocket = new WebSocket(this, socketURL, protocol, proxyHost, proxyPort, headers);
-			webSocket.addEventListener("event", onData);
+			webSocket = new WebSocket(FlashSocket.id++, socketURL, [protocol, null], getOrigin(), proxyHost, proxyPort, "", headers, this );
+			//webSocket = new WebSocket(this, socketURL, protocol, proxyHost, proxyPort, headers);
+			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
+			webSocket.addEventListener(WebSocketEvent.CLOSE, onClose);
+			webSocket.addEventListener(WebSocketEvent.OPEN, onOpen);
 			webSocket.addEventListener(Event.CLOSE, onClose);
 			webSocket.addEventListener(Event.CONNECT, onConnect);
 			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
@@ -198,9 +209,25 @@ package com.pnwrain.flashsocket
 		/////////////////////////////////////////////////////////////////
 		protected var frame:String = '~m~';
 		
-		protected function onData(e:*):void{
-			var event:Object = (e.target as WebSocket).receiveEvents();
-			var data:Object = event[0];
+		
+		protected function onOpen(e:WebSocketEvent):void 
+		{
+			//this is good I think
+		}
+		
+		protected function onMessage(e:WebSocketEvent):void 
+		{
+			this._setTimeout();
+			var msg:String = decodeURIComponent(e.message);
+			if (msg){
+				this._onMessage(msg);
+			}
+		}
+		
+		protected function onData(e:WebSocketEvent):void {
+		
+			//var event:Object = (e.target as WebSocket).receiveEvents();
+			var data:Object = e.message;
 			
 			if ( data.type == "message" ){
 				this._setTimeout();
@@ -369,6 +396,34 @@ package com.pnwrain.flashsocket
 			send(msg, event, callback) 
 		}
 		
+		/* DELEGATE flash.events.IEventDispatcher */
+		
+		public function addEventListener(type:String, listener:Function, useCapture:Boolean = false, priority:int = 0, useWeakReference:Boolean = false):void 
+		{
+			_eventDispatcher.addEventListener(type, listener, useCapture, priority, useWeakReference);
+		}
+		
+		public function dispatchEvent(event:Event):Boolean 
+		{
+			return _eventDispatcher.dispatchEvent(event);
+		}
+		
+		public function hasEventListener(type:String):Boolean 
+		{
+			return _eventDispatcher.hasEventListener(type);
+		}
+		
+		public function removeEventListener(type:String, listener:Function, useCapture:Boolean = false):void 
+		{
+			_eventDispatcher.removeEventListener(type, listener, useCapture);
+		}
+		
+		public function willTrigger(type:String):Boolean 
+		{
+			return _eventDispatcher.willTrigger(type);
+		}
+		
+		
 		private function _onConnect():void{
 			this.connected = true;
 			this.connecting = false;
@@ -397,5 +452,9 @@ package com.pnwrain.flashsocket
 			}
 			return ret;
 		};
+		
+		public function get eventDispatcher():IEventDispatcher {return _eventDispatcher;}
+		
+		public function set eventDispatcher(value:IEventDispatcher):void { _eventDispatcher = value; }
 	}
 }
