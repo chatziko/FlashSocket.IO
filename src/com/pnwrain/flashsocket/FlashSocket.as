@@ -49,7 +49,6 @@ package com.pnwrain.flashsocket
 		
 		public function FlashSocket( domain:String, protocol:String=null, proxyHost:String = null, proxyPort:int = 0, headers:String = null)
 		{
-			trace( "domain : " + domain );
 			var httpProtocal:String = "http";
 			var webSocketProtocal:String = "ws";
 			
@@ -63,11 +62,9 @@ package com.pnwrain.flashsocket
 			//if the user passed in http:// or https:// we want to strip that out
 			//if(domain.indexOf('://')>=0){
 				domain = URLUtil.host;
-				trace( "domain : " + domain );
 			//}
 
 			this.socketURL = webSocketProtocal + "://" + domain + "/socket.io/1/flashsocket";
-			trace( "this.socketURL : " + this.socketURL );
 			this.callerUrl = httpProtocal+"://"+domain;
 			
 			this.domain = domain;
