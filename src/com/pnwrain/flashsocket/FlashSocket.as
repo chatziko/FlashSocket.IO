@@ -18,13 +18,12 @@ package com.pnwrain.flashsocket
 	import socket.io.parser.Decoder;
 	import socket.io.parser.Encoder;
 	import socket.io.parser.Parser;
-	import uk.co.wilding.utilities.recursiveTrace;
 
 	public class FlashSocket implements IWebSocketWrapper, IWebSocketLogger, IEventDispatcher
 	{
 		static private var id:int = 0;
 		
-		protected var debug:Boolean = true;
+		protected var debug:Boolean = false;
 		protected var callerUrl:String;
 		protected var socketURL:String;
 		protected var webSocket:WebSocket;
@@ -82,7 +81,7 @@ package com.pnwrain.flashsocket
 			this.proxyHost = proxyHost;
 			this.proxyPort = proxyPort;
 			this.headers = headers;
-			this.channel = URLUtil.pathname || "";
+			this.channel = URLUtil.pathname || "/";
 			
 			if (this.channel && this.channel.length > 0 && this.channel.indexOf("/") !=
 				0)
@@ -412,6 +411,9 @@ package com.pnwrain.flashsocket
 			if (msg as Array)
 			{
 				(msg as Array).unshift(event);
+			} else
+			{
+				msg = [event, msg];
 			}
 			
 			var packet:Object = {type: Parser.EVENT, data: msg, nsp: this.channel}
@@ -523,5 +525,22 @@ package com.pnwrain.flashsocket
 		public function get eventDispatcher():IEventDispatcher { return _eventDispatcher; }
 		
 		public function set eventDispatcher(value:IEventDispatcher):void { _eventDispatcher = value; }
+		
+		public function close():void {
+			if (webSocket && (connected || connecting)) {
+				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
+				webSocket.removeEventListener(WebSocketEvent.CLOSE, onClose);
+				webSocket.removeEventListener(WebSocketEvent.OPEN, onOpen);
+				webSocket.removeEventListener(Event.CLOSE, onClose);
+				webSocket.removeEventListener(Event.CONNECT, onConnect);
+				webSocket.removeEventListener(IOErrorEvent.IO_ERROR, onIoError);
+				webSocket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
+				if (_keepaliveTimer)
+					_keepaliveTimer.removeEventListener(TimerEvent.TIMER, keepaliveTimer_timer);
+				if (_pongTimer)
+					_pongTimer.removeEventListener(TimerEvent.TIMER_COMPLETE, pongTimer_timerComplete);
+				webSocket.close();
+			}
+		}
 	}
 }
