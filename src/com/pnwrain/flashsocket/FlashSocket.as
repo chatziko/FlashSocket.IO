@@ -40,6 +40,7 @@ package com.pnwrain.flashsocket
 		private var proxyHost:String;
 		private var proxyPort:int;
 		private var headers:String;
+		private var query:String;
 		private var timer:Timer;
 		private var channel:String = "";
 		
@@ -55,7 +56,7 @@ package com.pnwrain.flashsocket
 		public var connected:Boolean;
 		public var connecting:Boolean;
 		
-		public function FlashSocket(domain:String, protocol:String = null, proxyHost:String = null, proxyPort:int = 0, headers:String = null)
+		public function FlashSocket(domain:String, protocol:String = null, proxyHost:String = null, proxyPort:int = 0, headers:String = null, query:String = null)
 		{
 			var httpProtocal:String = "http";
 			var webSocketProtocal:String = "ws";
@@ -73,7 +74,7 @@ package com.pnwrain.flashsocket
 			
 			domain = URLUtil.host;
 			
-			this.socketURL = webSocketProtocal + "://" + domain + "/socket.io/?EIO=2&transport=websocket";
+			this.socketURL = webSocketProtocal + "://" + domain + "/socket.io/?EIO=2&transport=websocket" + (query ? "&"+query : "");
 			this.callerUrl = httpProtocal + "://" + domain;
 			
 			this.domain = domain;
@@ -81,6 +82,7 @@ package com.pnwrain.flashsocket
 			this.proxyHost = proxyHost;
 			this.proxyPort = proxyPort;
 			this.headers = headers;
+			this.query = query;
 			this.channel = URLUtil.pathname || "/";
 			
 			if (this.channel && this.channel.length > 0 && this.channel.indexOf("/") !=
@@ -104,7 +106,7 @@ package com.pnwrain.flashsocket
 			var connectionUrl:String = httpProtocal + "://" + domain + "/socket.io/?EIO=2&time=" +
 				new Date().getTime() + _queryUrlSuffix.split("?").join("&");
 			// socket.io 1.0 starts with a polling transport and then upgrades later. It requires this to be set in the url.
-			connectionUrl += "&transport=polling"
+			connectionUrl += "&transport=polling" + (query ? "&"+query : "");
 			return connectionUrl;
 		}
 		
