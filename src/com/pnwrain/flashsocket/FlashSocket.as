@@ -401,7 +401,11 @@ package com.pnwrain.flashsocket
 						break;
 					
 					case Parser.ERROR: 
-						trace('3: error', packet.data);
+						log('3: error: ' + packet.data);
+
+						var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.ERROR);
+						fe.data = packet.data;
+						dispatchEvent(fe);
 						break;
 				}
 			}
