@@ -95,7 +95,7 @@ public class Decoder
 			}
 		}
 		
-		trace('decoded ' + str + ' as ' + p);
+		//trace('decoded ' + str + ' as ' + p);
 		return p;
 	}
 }

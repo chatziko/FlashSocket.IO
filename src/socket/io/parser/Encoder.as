@@ -25,7 +25,7 @@ public class Encoder
 	 */
 	public function encode(obj:*, callback:Function):void
 	{
-		trace('encoding packet ', obj);
+		//trace('encoding packet ', obj);
 		
 		if (obj.type == null)
 			throw(new Error("Incorrect object type"));
@@ -62,9 +62,9 @@ public class Encoder
 		if (obj.nsp && '/' != obj.nsp)
 		{
 			nsp = true;
-			trace( "nsp : " + nsp );
+			//trace( "nsp : " + nsp );
 			str += obj.nsp;
-			trace( "obj.nsp : " + obj.nsp );
+			//trace( "obj.nsp : " + obj.nsp );
 		}
 		
 		// immediately followed by the id
@@ -86,7 +86,7 @@ public class Encoder
 			str += com.adobe.serialization.json.JSON.encode(obj.data);
 		}
 		
-		trace('encoded ' + obj + ' as ' + str);
+		//trace('encoded ' + obj + ' as ' + str);
 		return str;
 	}
 
