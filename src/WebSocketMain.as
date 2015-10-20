@@ -1,7 +1,7 @@
 // Copyright: Hiroshi Ichikawa <http://gimite.net/en/>
 // License: New BSD License
 
-package  {
+package {
 
 import flash.display.Sprite;
 import flash.external.ExternalInterface;

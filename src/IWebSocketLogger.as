@@ -1,7 +1,7 @@
 // Copyright: Hiroshi Ichikawa <http://gimite.net/en/>
 // License: New BSD License
 
-package  {
+package {
 
 public interface IWebSocketLogger {
   function log(message:String):void;
