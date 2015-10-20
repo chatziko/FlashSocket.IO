@@ -7,10 +7,6 @@ package {
 
 import com.adobe.net.proxies.RFC2817Socket;
 import com.gsolo.encryption.SHA1;
-import com.hurlant.crypto.tls.TLSConfig;
-import com.hurlant.crypto.tls.TLSEngine;
-import com.hurlant.crypto.tls.TLSSecurityParameters;
-import com.hurlant.crypto.tls.TLSSocket;
 
 import flash.display.*;
 import flash.errors.*;
@@ -58,8 +54,6 @@ public class WebSocket extends EventDispatcher {
   private var headers:String;
   
   private var rawSocket:Socket;
-  private var tlsSocket:TLSSocket;
-  private var tlsConfig:TLSConfig;
   private var secureSocket:SecureSocket;
   
   private var socket:Socket;
@@ -74,7 +68,6 @@ public class WebSocket extends EventDispatcher {
   private var logger:IWebSocketLogger;
   private var base64Encoder:Base64Encoder = new Base64Encoder();
   
-  private var useFlashSecureSocket:Boolean;
   private var connectionTimeout:int;
   
   public function WebSocket(
@@ -82,7 +75,6 @@ public class WebSocket extends EventDispatcher {
 	  proxyHost:String, proxyPort:int,
 	  cookie:String, headers:String,
 	  logger:IWebSocketLogger,
-	  useFlashSecureSocket:Boolean = false,
 	  connectionTimeout:int = 1000) {
     this.logger = logger;
     this.id = id;
@@ -97,7 +89,6 @@ public class WebSocket extends EventDispatcher {
     this.origin = origin;
     this.requestedProtocols = protocols;
     this.cookie = cookie;
-	this.useFlashSecureSocket = useFlashSecureSocket;
 	this.connectionTimeout = connectionTimeout;
     // if present and not the empty string, headers MUST end with \r\n
     // headers should be zero or more complete lines, for example
@@ -115,24 +106,10 @@ public class WebSocket extends EventDispatcher {
     } else {
       rawSocket = new Socket();
       if (scheme == "wss") {
-		 if(!useFlashSecureSocket) {
-			 logger.log('using tlsSocket');
-			 tlsConfig= new TLSConfig(TLSEngine.CLIENT,
-				 null, null, null, null, null,
-				 TLSSecurityParameters.PROTOCOL_VERSION);
-			 tlsConfig.trustAllCertificates = true;
-			 tlsConfig.ignoreCommonNameMismatch = true;
-			 tlsSocket = new TLSSocket();
-			 tlsSocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
-			 socket = tlsSocket; 
-		 }
-		 else
-		 {
-			 logger.log('using internal SecureSocket');
-			 secureSocket = new SecureSocket();
-			 secureSocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
-			 rawSocket = socket = secureSocket;
-		 }
+		 logger.log('using internal SecureSocket');
+		 secureSocket = new SecureSocket();
+		 secureSocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
+		 rawSocket = socket = secureSocket;
       } else {
         rawSocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
         socket = rawSocket;
@@ -242,14 +219,6 @@ public class WebSocket extends EventDispatcher {
   private function onSocketConnect(event:Event):void {
     logger.log("connected");
 
-    if (scheme == "wss") {
-    	if(!useFlashSecureSocket)
-		{
-			logger.log("starting SSL/TLS");
-			tlsSocket.startTLS(rawSocket, host, tlsConfig);
-		}
-    }
-    
     var defaultPort:int = scheme == "wss" ? 443 : 80;
     var hostValue:String = host + (port == defaultPort ? "" : ":" + port);
     var key:String = generateKey();
