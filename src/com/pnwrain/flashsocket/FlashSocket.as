@@ -142,7 +142,6 @@ package com.pnwrain.flashsocket
 		
 		protected function onHandshake(event:Event = null):void
 		{
-			loadDefaultPolicyFile(socketURL);
 			webSocket = new WebSocket(FlashSocket.id++, socketURL, [protocol], getOrigin(), proxyHost, proxyPort, "", headers, this);
 			
 			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
@@ -202,14 +201,6 @@ package com.pnwrain.flashsocket
 		{
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.SECURITY_ERROR);
 			dispatchEvent(fe);
-		}
-		
-		protected function loadDefaultPolicyFile(wsUrl:String):void
-		{
-			var URLUtil:URL = new URL(wsUrl);
-			var policyUrl:String = "xmlsocket://" + URLUtil.hostname + ":843";
-			
-			Security.loadPolicyFile(policyUrl);
 		}
 		
 		public function getOrigin():String
