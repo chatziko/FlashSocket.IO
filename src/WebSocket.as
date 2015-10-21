@@ -75,7 +75,7 @@ public class WebSocket extends EventDispatcher {
 	  proxyHost:String, proxyPort:int,
 	  cookie:String, headers:String,
 	  logger:IWebSocketLogger,
-	  connectionTimeout:int = 1000) {
+	  connectionTimeout:int = 10000) {
     this.logger = logger;
     this.id = id;
     this.url = url;
@@ -104,13 +104,13 @@ public class WebSocket extends EventDispatcher {
       proxySocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
       rawSocket = socket = proxySocket;
     } else {
-      rawSocket = new Socket();
       if (scheme == "wss") {
 		 logger.log('using internal SecureSocket');
 		 secureSocket = new SecureSocket();
 		 secureSocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
 		 rawSocket = socket = secureSocket;
       } else {
+        rawSocket = new Socket();
         rawSocket.addEventListener(ProgressEvent.SOCKET_DATA, onSocketData);
         socket = rawSocket;
       }
