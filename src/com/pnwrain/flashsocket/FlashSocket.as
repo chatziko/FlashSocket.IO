@@ -348,13 +348,12 @@ package com.pnwrain.flashsocket
 						
 						if (null != packet.id)
 						{
-							trace('attaching ack callback to event');
-							if (this.acks.hasOwnProperty(packet.id))
-							{
-								args.push(this.acks(packet.id));
-							}
+							// the message has packet.id so it wants an ack
+							args.push(function(...args):void {
+								sendAck(args, packet.id)
+							})
 						}
-						
+
 						if (this.connected)
 						{
 							
@@ -433,6 +432,20 @@ package com.pnwrain.flashsocket
 			}
 		}
 		
+		private function sendAck(data:Array, id:String):void
+		{
+			var packet:Object = {type: Parser.ACK, data: data, nsp: this.channel, id: id}
+
+			try
+			{
+				webSocket.send(new Encoder().encodeAsString(packet));
+			}
+			catch (err:Error)
+			{
+				fatal("Unable to send message: " + err.message);
+			}
+		}
+
 		public function emit(event:String, msg:Object, callback:Function = null):void
 		{
 			send(msg, event, callback)
