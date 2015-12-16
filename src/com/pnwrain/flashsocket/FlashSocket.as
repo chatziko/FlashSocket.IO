@@ -372,6 +372,8 @@ package com.pnwrain.flashsocket
 						if (this.acks.hasOwnProperty(packet.id))
 						{
 							var func:Function = this.acks[packet.id] as Function;
+							delete this.acks[packet.id];
+
 							//pass however many args the function is looking for back to it
 							if (args.length > func.length)
 							{
@@ -382,7 +384,6 @@ package com.pnwrain.flashsocket
 								func.apply(null, args);
 							}
 							
-							delete this.acks[id];
 						}
 						break;
 					
