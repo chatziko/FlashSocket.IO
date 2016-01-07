@@ -1,0 +1,3 @@
+[submodule "libs/AS3WebSocket"]
+	path = libs/AS3WebSocket
+	url = https://github.com/chatziko/AS3WebSocket.git

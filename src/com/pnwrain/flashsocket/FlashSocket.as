@@ -3,6 +3,9 @@ package com.pnwrain.flashsocket
 	import com.adobe.serialization.json.JSON;
 	import com.jimisaacs.data.URL;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
+	import com.worlize.websocket.WebSocket;
+	import com.worlize.websocket.WebSocketEvent;
+	import com.worlize.websocket.WebSocketErrorEvent;
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	import flash.events.HTTPStatusEvent;
@@ -19,10 +22,8 @@ package com.pnwrain.flashsocket
 	import socket.io.parser.Encoder;
 	import socket.io.parser.Parser;
 
-	public class FlashSocket implements IWebSocketWrapper, IWebSocketLogger, IEventDispatcher
+	public class FlashSocket implements IEventDispatcher
 	{
-		static private var id:int = 0;
-		
 		protected var debug:Boolean = false;
 		protected var callerUrl:String;
 		protected var socketURL:String;
@@ -79,9 +80,9 @@ package com.pnwrain.flashsocket
 			
 			this.domain = domain;
 			this.protocol = protocol;
-			this.proxyHost = proxyHost;
-			this.proxyPort = proxyPort;
-			this.headers = headers;
+			this.proxyHost = proxyHost;			// not used cause
+			this.proxyPort = proxyPort;			// AS3WebSocket
+			this.headers = headers;				// not not support them
 			this.query = query;
 			this.channel = URLUtil.pathname || "/";
 			
@@ -142,15 +143,16 @@ package com.pnwrain.flashsocket
 		
 		protected function onHandshake(event:Event = null):void
 		{
-			webSocket = new WebSocket(FlashSocket.id++, socketURL, [protocol], getOrigin(), proxyHost, proxyPort, "", headers, this);
+			webSocket = new WebSocket(socketURL, getOrigin(), [protocol]);
 			
 			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
-			webSocket.addEventListener(WebSocketEvent.CLOSE, onClose);
+			webSocket.addEventListener(WebSocketEvent.CLOSED, onClose);
 			webSocket.addEventListener(WebSocketEvent.OPEN, onOpen);
-			webSocket.addEventListener(Event.CLOSE, onClose);
-			webSocket.addEventListener(Event.CONNECT, onConnect);
+			webSocket.addEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
 			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
 			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
+
+			webSocket.connect();
 		}
 		
 		protected function onDiscoverError(event:Event):void
@@ -182,12 +184,6 @@ package com.pnwrain.flashsocket
 		protected function onClose(event:Event):void
 		{
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CLOSE);
-			dispatchEvent(fe);
-		}
-		
-		protected function onConnect(event:Event):void
-		{
-			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT);
 			dispatchEvent(fe);
 		}
 		
@@ -241,12 +237,12 @@ package com.pnwrain.flashsocket
 			//this is good I think
 			
 			//ask to upgrade the connection to websocket
-			webSocket.send("2probe");
+			webSocket.sendUTF("2probe");
 		}
 		
 		protected function onMessage(e:WebSocketEvent):void
 		{
-			var msg:String = decodeURIComponent(e.message);
+			var msg:String = decodeURIComponent(e.message.utf8Data);
 			if (msg)
 			{
 				this._onMessage(msg);
@@ -304,7 +300,7 @@ package com.pnwrain.flashsocket
 			if (message == "3probe")
 			{
 				// send the upgrade packet.
-				webSocket.send("5");
+				webSocket.sendUTF("5");
 				return;
 			}
 			
@@ -333,7 +329,7 @@ package com.pnwrain.flashsocket
 							//if we're on a specific channel (namespace) then we need to tell the server to switch us over
 							try
 							{
-								webSocket.send(new Encoder().encodeAsString({type: 0, nsp: this.channel}));
+								webSocket.sendUTF(new Encoder().encodeAsString({type: 0, nsp: this.channel}));
 							}
 							catch (err:Error)
 							{
@@ -425,7 +421,7 @@ package com.pnwrain.flashsocket
 			
 			try
 			{
-				webSocket.send(new Encoder().encodeAsString(packet));
+				webSocket.sendUTF(new Encoder().encodeAsString(packet));
 			}
 			catch (err:Error)
 			{
@@ -439,7 +435,7 @@ package com.pnwrain.flashsocket
 
 			try
 			{
-				webSocket.send(new Encoder().encodeAsString(packet));
+				webSocket.sendUTF(new Encoder().encodeAsString(packet));
 			}
 			catch (err:Error)
 			{
@@ -515,7 +511,7 @@ package com.pnwrain.flashsocket
 			_pongTimer.addEventListener(TimerEvent.TIMER_COMPLETE, pongTimer_timerComplete);
 			_pongTimer.start();
 			// 2 - ping
-			webSocket.send("2");
+			webSocket.sendUTF("2");
 		}
 		
 		private function pongTimer_timerComplete(e:TimerEvent):void
@@ -540,10 +536,9 @@ package com.pnwrain.flashsocket
 		public function close():void {
 			if (webSocket && (connected || connecting)) {
 				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
-				webSocket.removeEventListener(WebSocketEvent.CLOSE, onClose);
+				webSocket.removeEventListener(WebSocketEvent.CLOSED, onClose);
 				webSocket.removeEventListener(WebSocketEvent.OPEN, onOpen);
-				webSocket.removeEventListener(Event.CLOSE, onClose);
-				webSocket.removeEventListener(Event.CONNECT, onConnect);
+				webSocket.removeEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
 				webSocket.removeEventListener(IOErrorEvent.IO_ERROR, onIoError);
 				webSocket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
 				if (_keepaliveTimer)
