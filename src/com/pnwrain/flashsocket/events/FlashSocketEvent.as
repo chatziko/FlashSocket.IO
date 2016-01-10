@@ -1,7 +1,7 @@
 package com.pnwrain.flashsocket.events
 {
 	import flash.events.Event;
-	
+
 	public class FlashSocketEvent extends Event
 	{
 		public static const CLOSE:String = "close";
@@ -12,14 +12,14 @@ package com.pnwrain.flashsocket.events
 		public static const DISCONNECT:String = "disconnect";
 		public static const CONNECT_ERROR:String = "connectError";
 		public static const ERROR:String = "error";
-		
+
 		public var data:*;
-		
+
 		public function FlashSocketEvent(type:String, bubbles:Boolean=true, cancelable:Boolean=false)
 		{
 			super(type, bubbles, cancelable);
 		}
-		
+
 		public override function clone():Event 
 		{ 
 			var event:FlashSocketEvent = new FlashSocketEvent(type, bubbles, cancelable);
