@@ -1,95 +1,101 @@
-package socket.io.parser
-{
-	import com.adobe.serialization.json.JSON;
+// Encoder from socket.io-parser/index.js with as few modifications as possible
 
-/**
- * ...
- * @author Robin Wilding
- */
-public class Encoder
-{
-	
-	public function Encoder()
-	{
-	
-	}
-	
-	/**
-	 * Encode a packet as a single string if non-binary, or as a
-	 * buffer sequence, depending on packet type.
-	 *
-	 * @param {Object} obj - packet object
-	 * @param {Function} callback - function to handle encodings (likely engine.write)
-	 * @return Calls callback with Array of encodings
-	 * @api public
-	 */
-	public function encode(obj:*, callback:Function):void
-	{
-		//trace('encoding packet ', obj);
-		
-		if (obj.type == null)
-			throw(new Error("Incorrect object type"));
-		
-		if (Parser.BINARY_EVENT == obj.type || Parser.BINARY_ACK == obj.type)
-		{
-			throw(new Error("Encoder Does not support binary data"));
-		}
-		else
-		{
-			var encoding:String = encodeAsString(obj);
-			callback([encoding]);
-		}
-	}
-	
-	public function encodeAsString(obj:*):String
-	{
-		var str:String = '4';
-		var nsp:Boolean = false;
-		
-		// first is type
-		str += obj.type;
-		
-		// attachments if we have them
-		// RW Unsupported Binary
-		/*if (exports.BINARY_EVENT == obj.type || exports.BINARY_ACK == obj.type)
-		   {
-		   str += obj.attachments;
-		   str += '-';
-		 }*/
-		
-		// if we have a namespace other than `/`
-		// we append it followed by a comma `,`
-		if (obj.nsp && '/' != obj.nsp)
-		{
-			nsp = true;
-			//trace( "nsp : " + nsp );
-			str += obj.nsp;
-			//trace( "obj.nsp : " + obj.nsp );
-		}
-		
-		// immediately followed by the id
-		if (null != obj.id)
-		{
-			if (nsp)
-			{
-				str += ',';
-				nsp = false;
-			}
-			str += obj.id;
-		}
-		
-		// json data
-		if (null != obj.data)
-		{
-			if (nsp)
-				str += ',';
-			str += com.adobe.serialization.json.JSON.encode(obj.data);
-		}
-		
-		//trace('encoded ' + obj + ' as ' + str);
-		return str;
-	}
+package socket.io.parser {
+
+import com.adobe.serialization.json.JSON;
+import flash.utils.ByteArray;
+
+public class Encoder {
+
+  /**
+   * Encode a packet as a single string if non-binary, or as a
+   * buffer sequence, depending on packet type.
+   *
+   * @param {Object} obj - packet object
+   * @param {Function} callback - function to handle encodings (likely engine.write)
+   * @return Calls callback with Array of encodings
+   * @api public
+   */
+
+  // socket.io's encoder is asynchronous due to the need to convert Blobs.
+  // Ours is synchronous for simplicity
+  //
+  public function encode(obj:Object):Array {
+
+    if (Parser.BINARY_EVENT == obj.type || Parser.BINARY_ACK == obj.type) {
+      return encodeAsBinary(obj);
+    }
+    else {
+      return [encodeAsString(obj)];
+    }
+  }
+
+  /**
+   * Encode packet as string.
+   *
+   * @param {Object} packet
+   * @return {String} encoded
+   * @api private
+   */
+
+  public function encodeAsString(obj:Object):String {
+    var str:String = '';
+    var nsp:Boolean = false;
+
+    // first is type
+    str += obj.type;
+
+    // attachments if we have them
+    if (Parser.BINARY_EVENT == obj.type || Parser.BINARY_ACK == obj.type) {
+      str += obj.attachments;
+      str += '-';
+    }
+
+    // if we have a namespace other than `/`
+    // we append it followed by a comma `,`
+    if (obj.nsp && '/' != obj.nsp) {
+      nsp = true;
+      str += obj.nsp;
+    }
+
+    // immediately followed by the id
+    if (null != obj.id) {
+      if (nsp) {
+        str += ',';
+        nsp = false;
+      }
+      str += obj.id;
+    }
+
+    // json data
+    if (null != obj.data) {
+      if (nsp) str += ',';
+      str += com.adobe.serialization.json.JSON.encode(obj.data);
+    }
+
+    return str;
+  }
+
+  /**
+   * Encode packet as 'buffer sequence' by removing blobs, and
+   * deconstructing packet into object with placeholders and
+   * a list of buffers.
+   *
+   * @param {Object} packet
+   * @return {Buffer} encoded
+   * @api private
+   */
+
+  public function encodeAsBinary(obj:Object):Array {
+
+    var deconstruction:Object = Binary.deconstructPacket(obj);
+    var pack:String = encodeAsString(deconstruction.packet);
+    var buffers:Array = deconstruction.buffers;
+
+    buffers.unshift(pack); // add packet info to beginning of data list
+    return buffers;
+  }
 
 }
 
-}
+} // package

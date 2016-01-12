@@ -58,6 +58,7 @@ package com.pnwrain.flashsocket
 		private var heartBeatTimeout:int;
 		public var connected:Boolean;
 		public var connecting:Boolean;
+		private var encoder:Encoder;
 		private var decoder:Decoder;
 
 		public function FlashSocket(domain:String, protocol:String = null, proxyHost:String = null, proxyPort:int = 0, headers:String = null, query:String = null)
@@ -104,6 +105,7 @@ package com.pnwrain.flashsocket
 			ul.addEventListener(HTTPStatusEvent.HTTP_STATUS, onDiscoverError);
 			ul.addEventListener(IOErrorEvent.IO_ERROR, onDiscoverError);
 
+			encoder = new Encoder();
 			decoder = new Decoder();
 			decoder.addEventListener(ParserEvent.DECODED, onDecoded);
 		}
@@ -318,7 +320,7 @@ package com.pnwrain.flashsocket
 						//if we're on a specific channel (namespace) then we need to tell the server to switch us over
 						try
 						{
-							webSocket.sendUTF(new Encoder().encodeAsString({type: 0, nsp: this.channel}));
+							sendRawPackets(encoder.encode({type: Parser.CONNECT, nsp: this.channel}));
 						}
 						catch (err:Error)
 						{
@@ -329,7 +331,6 @@ package com.pnwrain.flashsocket
 
 				case Parser.EVENT:
 				case Parser.BINARY_EVENT:
-
 					args = packet.data || [];
 
 					if (null != packet.id)
@@ -342,7 +343,6 @@ package com.pnwrain.flashsocket
 
 					if (this.connected)
 					{
-
 						var fem:FlashSocketEvent = new FlashSocketEvent(args.shift());
 						fem.data = args;
 						dispatchEvent(fem)
@@ -398,7 +398,8 @@ package com.pnwrain.flashsocket
 				msg = [event, msg];
 			}
 
-			var packet:Object = {type: Parser.EVENT, data: msg, nsp: this.channel}
+			var type:Number = hasBin(msg) ? Parser.BINARY_EVENT : Parser.EVENT;
+			var packet:Object = { type: type, data: msg, nsp: this.channel }
 
 			if (null != callback)
 			{
@@ -410,7 +411,7 @@ package com.pnwrain.flashsocket
 
 			try
 			{
-				webSocket.sendUTF(new Encoder().encodeAsString(packet));
+				sendRawPackets(encoder.encode(packet));
 			}
 			catch (err:Error)
 			{
@@ -420,16 +421,49 @@ package com.pnwrain.flashsocket
 
 		private function sendAck(data:Array, id:String):void
 		{
-			var packet:Object = {type: Parser.ACK, data: data, nsp: this.channel, id: id}
+			var type:Number = hasBin(data) ? Parser.BINARY_ACK : Parser.ACK;
+			var packet:Object = { type: type, data: data, nsp: this.channel, id: id }
 
 			try
 			{
-				webSocket.sendUTF(new Encoder().encodeAsString(packet));
+				sendRawPackets(encoder.encode(packet));
 			}
 			catch (err:Error)
 			{
 				fatal("Unable to send message: " + err.message);
 			}
+		}
+
+		// this does the job of engine.io. Packets contains Strings (for text packets) and/or
+		// ByteArrays (for binary packets). "4" is sent at the begining, denoting a message packet
+		// see: https://github.com/socketio/engine.io-protocol
+		//
+		private function sendRawPackets(packets:Array):void {
+			for(var i:Number = 0; i < packets.length; i++) {
+				if(packets[i] is String) {
+					webSocket.sendUTF("4" + packets[i]);
+				} else {
+					// new ByteArray (shouldn't modify the caller's data) with "4" at the beginning
+					var data:ByteArray = new ByteArray();
+					data.writeByte(4);
+					data.writeBytes(packets[i], 0, packets[i].length);
+
+					webSocket.sendBytes(data);
+				}
+			}
+		}
+
+		// returns try if val contains a ByteArray
+		//
+		private function hasBin(val:*):Boolean {
+			if(val is ByteArray) {
+				return true;
+			} else if(typeof val == 'object') {
+				for each (var elem:* in val)
+					if(hasBin(elem))
+						return true;
+			}
+			return false;
 		}
 
 		public function emit(event:String, msg:Object, callback:Function = null):void
