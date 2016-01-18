@@ -2,7 +2,6 @@
 
 package socket.io.parser {
 
-import com.adobe.serialization.json.JSON;
 import flash.events.EventDispatcher;
 import flash.utils.ByteArray;
 
@@ -111,7 +110,7 @@ public class Decoder extends EventDispatcher {
     // look up json data
     if (str.charAt(++i)) {
       try {
-        p.data = com.adobe.serialization.json.JSON.decode(str.substr(i));
+        p.data = JSON.parse(str.substr(i));
       } catch(e:*) {
         return error();
       }

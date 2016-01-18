@@ -2,7 +2,6 @@
 
 package socket.io.parser {
 
-import com.adobe.serialization.json.JSON;
 import flash.utils.ByteArray;
 
 public class Encoder {
@@ -70,7 +69,7 @@ public class Encoder {
     // json data
     if (null != obj.data) {
       if (nsp) str += ',';
-      str += com.adobe.serialization.json.JSON.encode(obj.data);
+      str += JSON.stringify(obj.data);
     }
 
     return str;

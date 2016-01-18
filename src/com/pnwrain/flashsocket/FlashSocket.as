@@ -1,6 +1,5 @@
 package com.pnwrain.flashsocket
 {
-	import com.adobe.serialization.json.JSON;
 	import com.jimisaacs.data.URL;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
 	import com.worlize.websocket.WebSocket;
@@ -123,7 +122,7 @@ package com.pnwrain.flashsocket
 		{
 			var response:String = event.target.data;
 			response = response.substr(response.indexOf("{"));
-			var responseObj:Object = com.adobe.serialization.json.JSON.decode(response);
+			var responseObj:Object = JSON.parse(response);
 
 			sessionID = responseObj.sid;
 			heartBeatTimeout = responseObj.pingTimeout;
