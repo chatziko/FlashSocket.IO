@@ -7,7 +7,6 @@ package com.pnwrain.flashsocket
 	import com.adobe.net.URI
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
-	import flash.events.IEventDispatcher;
 	import flash.events.IOErrorEvent;
 	import flash.events.SecurityErrorEvent;
 	import flash.events.TimerEvent;
@@ -18,7 +17,7 @@ package com.pnwrain.flashsocket
 	import socket.io.parser.Parser;
 	import socket.io.parser.ParserEvent;
 
-	public class FlashSocket implements IEventDispatcher
+	public class FlashSocket extends EventDispatcher
 	{
 		protected var debug:Boolean = false;
 		protected var webSocket:WebSocket;
@@ -26,7 +25,6 @@ package com.pnwrain.flashsocket
 		//vars returned from discovery
 		public var sessionID:String;
 
-		private var _eventDispatcher:IEventDispatcher = new EventDispatcher();
 		//hold over variables from constructor for discover to use
 		private var host:String;
 		private var protocol:String;
@@ -410,32 +408,6 @@ package com.pnwrain.flashsocket
 			send(msg, event, callback)
 		}
 
-		/* DELEGATE flash.events.IEventDispatcher */
-
-		public function addEventListener(type:String, listener:Function, useCapture:Boolean = false, priority:int = 0, useWeakReference:Boolean = false):void
-		{
-			_eventDispatcher.addEventListener(type, listener, useCapture, priority, useWeakReference);
-		}
-
-		public function dispatchEvent(event:Event):Boolean
-		{
-			return _eventDispatcher.dispatchEvent(event);
-		}
-
-		public function hasEventListener(type:String):Boolean
-		{
-			return _eventDispatcher.hasEventListener(type);
-		}
-
-		public function removeEventListener(type:String, listener:Function, useCapture:Boolean = false):void
-		{
-			_eventDispatcher.removeEventListener(type, listener, useCapture);
-		}
-
-		public function willTrigger(type:String):Boolean
-		{
-			return _eventDispatcher.willTrigger(type);
-		}
 
 		private function emitBuffered():void
 		{
@@ -490,11 +462,6 @@ package com.pnwrain.flashsocket
 			var e:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.DISCONNECT);
 			dispatchEvent(e);
 		}
-
-
-		public function get eventDispatcher():IEventDispatcher { return _eventDispatcher; }
-
-		public function set eventDispatcher(value:IEventDispatcher):void { _eventDispatcher = value; }
 
 		public function close():void {
 			if (webSocket && (connected || connecting)) {
