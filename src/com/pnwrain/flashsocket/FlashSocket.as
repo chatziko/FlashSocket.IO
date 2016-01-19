@@ -1,21 +1,16 @@
 package com.pnwrain.flashsocket
 {
-	import com.jimisaacs.data.URL;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
 	import com.worlize.websocket.WebSocket;
 	import com.worlize.websocket.WebSocketEvent;
 	import com.worlize.websocket.WebSocketErrorEvent;
+	import com.adobe.net.URI
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
-	import flash.events.HTTPStatusEvent;
 	import flash.events.IEventDispatcher;
 	import flash.events.IOErrorEvent;
 	import flash.events.SecurityErrorEvent;
 	import flash.events.TimerEvent;
-	import flash.net.URLLoader;
-	import flash.net.URLRequest;
-	import flash.net.URLRequestMethod;
-	import flash.system.Security;
 	import flash.utils.Timer;
 	import flash.utils.ByteArray;
 	import socket.io.parser.Decoder;
@@ -26,30 +21,20 @@ package com.pnwrain.flashsocket
 	public class FlashSocket implements IEventDispatcher
 	{
 		protected var debug:Boolean = false;
-		protected var callerUrl:String;
-		protected var socketURL:String;
 		protected var webSocket:WebSocket;
 
 		//vars returned from discovery
 		public var sessionID:String;
-		protected var connectionClosingTimeout:int;
-		protected var protocols:Array;
 
 		private var _eventDispatcher:IEventDispatcher = new EventDispatcher();
 		//hold over variables from constructor for discover to use
-		private var domain:String;
+		private var host:String;
 		private var protocol:String;
-		private var proxyHost:String;
-		private var proxyPort:int;
-		private var headers:String;
 		private var query:String;
 		private var timer:Timer;
-		private var channel:String = "";
-
-		private var ackRegexp:RegExp = new RegExp('(\\d+)\\+(.*)');
+		private var channel:String;
 		private var ackId:int = 0;
 		private var acks:Object = {};
-		private var _queryUrlSuffix:String;
 		private var heartBeatInterval:int;
 		private var _receiveBuffer:Array = [];
 		private var _keepaliveTimer:Timer;
@@ -60,59 +45,45 @@ package com.pnwrain.flashsocket
 		private var encoder:Encoder;
 		private var decoder:Decoder;
 
-		public function FlashSocket(domain:String, protocol:String = null, proxyHost:String = null, proxyPort:int = 0, headers:String = null, query:String = null)
+		public function FlashSocket(uri:String, ...ignore) // ...ignore is for compatibility
 		{
-			var httpProtocal:String = "http";
-			var webSocketProtocal:String = "ws";
+			var parsed:URI = new URI(uri)
 
-			_queryUrlSuffix = (domain.split("?")[1] != undefined) ? "?" + domain.split("?")[1] :
-				"";
+			protocol = parsed.scheme;
+			host = parsed.authority + (parsed.port ? ':'+parsed.port : '');
+			query = parsed.query;
+			channel = parsed.path || "/";
 
-			var URLUtil:URL = new URL(domain);
-			if (URLUtil.protocol == "https")
-			{
-				httpProtocal = "https";
-				webSocketProtocal = "wss";
-			}
-			protocol = httpProtocal;
+			encoder = new Encoder();
+			decoder = new Decoder();
+			decoder.addEventListener(ParserEvent.DECODED, onDecoded);
 
-			domain = URLUtil.host;
+			connectSocket();
+		}
 
-			this.socketURL = webSocketProtocal + "://" + domain + "/socket.io/?EIO=2&transport=websocket" + (query ? "&"+query : "");
-			this.callerUrl = httpProtocal + "://" + domain;
+		/*
+		The socket.io protocol allows to start with polling and then uprgade to websocket. But the previous version of FlashSocket
+		was _not_ properly doing this: it would do a polling request to connect, no other polling requests (losing incoming messages), then
+		open websocket and only then it would consider the connection open and started receiving messages. So it needed websockets anyway, it
+		would waste time on an initial polling request and risk to lose messages.
 
-			this.domain = domain;
-			this.protocol = protocol;
-			this.proxyHost = proxyHost;			// not used cause
-			this.proxyPort = proxyPort;			// AS3WebSocket
-			this.headers = headers;				// not not support them
-			this.query = query;
-			this.channel = URLUtil.pathname || "/";
+		So we removed the polling request completely, and only connect via websocket now (direct connect, not upgrade). The code below
+		has been kept in case we implement proper polling in the future.
 
-			if (this.channel && this.channel.length > 0 && this.channel.indexOf("/") !=
-				0)
-			{
-				this.channel = "/" + this.channel;
-			}
-
+		protected function connectPolling():void {
 			var r:URLRequest = new URLRequest();
-			r.url = getConnectionUrl(httpProtocal, domain);
+			r.url = getConnectionUrl();
 			r.method = URLRequestMethod.GET;
 
 			var ul:URLLoader = new URLLoader(r);
 			ul.addEventListener(Event.COMPLETE, onDiscover);
 			ul.addEventListener(HTTPStatusEvent.HTTP_STATUS, onDiscoverError);
 			ul.addEventListener(IOErrorEvent.IO_ERROR, onDiscoverError);
-
-			encoder = new Encoder();
-			decoder = new Decoder();
-			decoder.addEventListener(ParserEvent.DECODED, onDecoded);
 		}
 
-		protected function getConnectionUrl(httpProtocal:String, domain:String):String
+		protected function getConnectionUrl():String
 		{
-			var connectionUrl:String = httpProtocal + "://" + domain + "/socket.io/?EIO=2&time=" +
-				new Date().getTime() + _queryUrlSuffix.split("?").join("&");
+			var connectionUrl:String = protocol + "://" + host + "/socket.io/?EIO=2&time=" + new Date().getTime()
 			// socket.io 1.0 starts with a polling transport and then upgrades later. It requires this to be set in the url.
 			connectionUrl += "&transport=polling" + (query ? "&"+query : "");
 			return connectionUrl;
@@ -121,45 +92,10 @@ package com.pnwrain.flashsocket
 		protected function onDiscover(event:Event):void
 		{
 			var response:String = event.target.data;
-			response = response.substr(response.indexOf("{"));
-			var responseObj:Object = JSON.parse(response);
+			var json:String = response.substr(response.indexOf("{"));
+			setConnectionOptions(json);
 
-			sessionID = responseObj.sid;
-			heartBeatTimeout = responseObj.pingTimeout;
-			heartBeatInterval = responseObj.pingInterval;
-			protocols = responseObj.upgrades;
-
-			var flashSupported:Boolean = false;
-			for (var i:int = 0; i < protocols.length; i++)
-			{
-				if (protocols[i] == "flashsocket")
-				{
-					flashSupported = true;
-					break;
-				}
-			}
-
-			socketURL += _queryUrlSuffix.split("?").join("&")
-			var index:int = this.socketURL.lastIndexOf("/")
-			this.socketURL = this.socketURL.slice(0, index) + this.socketURL.slice(index) +
-				"&sid=" + sessionID;
-
-			onHandshake(event);
-
-		}
-
-		protected function onHandshake(event:Event = null):void
-		{
-			webSocket = new WebSocket(socketURL, getOrigin(), [protocol]);
-
-			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
-			webSocket.addEventListener(WebSocketEvent.CLOSED, onClose);
-			webSocket.addEventListener(WebSocketEvent.OPEN, onOpen);
-			webSocket.addEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
-			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
-			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
-
-			webSocket.connect();
+			connectSocket();
 		}
 
 		protected function onDiscoverError(event:Event):void
@@ -174,18 +110,36 @@ package com.pnwrain.flashsocket
 				}
 			}
 		}
+		*/
 
-		protected function onHandshakeError(event:Event):void
+		protected function setConnectionOptions(json:String):void {
+			var opts:Object = JSON.parse(json);
+			sessionID = opts.sid;
+			heartBeatTimeout = opts.pingTimeout;
+			heartBeatInterval = opts.pingInterval;
+		}
+
+		protected function connectSocket(event:Event = null):void
 		{
-			if (event is HTTPStatusEvent)
-			{
-				if ((event as HTTPStatusEvent).status != 200)
-				{
-					//we were unsuccessful in connecting to server for discovery
-					var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT_ERROR);
-					dispatchEvent(fe);
-				}
-			}
+			// no sid cause we're not upgrading
+			var socketURL:String = (protocol == 'https' ? 'wss' : 'ws') + "://" + host + "/socket.io/?EIO=3&transport=websocket" + (query ? "&"+query : "");
+			var origin:String = protocol + "://" + host.toLowerCase();
+
+			webSocket = new WebSocket(socketURL, origin, [protocol]);
+
+			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
+			webSocket.addEventListener(WebSocketEvent.CLOSED, onClose);
+			webSocket.addEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onConnectionFail);
+			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
+			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
+
+			webSocket.connect();
+		}
+
+		protected function onConnectionFail(event:Event):void
+		{
+			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT_ERROR);
+			dispatchEvent(fe);
 		}
 
 		protected function onClose(event:Event):void
@@ -204,17 +158,6 @@ package com.pnwrain.flashsocket
 		{
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.SECURITY_ERROR);
 			dispatchEvent(fe);
-		}
-
-		public function getOrigin():String
-		{
-			var URLUtil:URL = new URL(this.callerUrl);
-			return (URLUtil.protocol + "://" + URLUtil.host.toLowerCase());
-		}
-
-		public function getCallerHost():String {
-			return null;
-			//I dont think we need this
 		}
 
 		public function log(message:String):void
@@ -239,37 +182,34 @@ package com.pnwrain.flashsocket
 		/////////////////////////////////////////////////////////////////
 		protected var frame:String = '~m~';
 
-		protected function onOpen(e:WebSocketEvent):void
-		{
-			//this is good I think
-
-			//ask to upgrade the connection to websocket
-			webSocket.sendUTF("2probe");
-		}
-
 		protected function onMessage(e:WebSocketEvent):void
 		{
-			/*
-			 * https://github.com/Automattic/socket.io-client/blob/master/socket.io.js#L3460
-			   open:     0    // non-ws
+			/* This is the lower-level engine.io protocol
+			 * https://github.com/socketio/engine.io-protocol
+			   open:       0    // non-ws
 			   , close:    1    // non-ws
 			   , ping:     2
 			   , pong:     3
 			   , message:  4
 			   , upgrade:  5
-
-			   , noop:     		6
+			   , noop:     6
 			 */
 			if(e.message.type == 'utf8') {
 				// utf8 message
 				var message:String = decodeURIComponent(e.message.utf8Data);
-				if (message == "3") {
+
+				if (message.charAt(0) == "0") {
+					// the rest of the message is a json with connection options
+					setConnectionOptions(message.substr(1));
+				
+				} else if (message == "3") {
 					// response from server from the ping, so cancel the waiting
 					_pongTimer.stop();
 
-				} else if (message == "3probe") {
+				// we don't do probing
+				//} else if (message == "3probe") {
 					// send the upgrade packet.
-					webSocket.sendUTF("5");
+					//webSocket.sendUTF("5");
 
 				} else if (message.charAt(0) == "4") {
 					decoder.add(message.substr(1))
@@ -294,8 +234,9 @@ package com.pnwrain.flashsocket
 
 		// called when a packet is fully decoded
 		private function onDecoded(ev:ParserEvent):void {
-			//https://github.com/automattic/socket.io-protocol
-			/*	Packet#CONNECT (0)
+			/* This is the higher-level socket.io protocol
+			   https://github.com/automattic/socket.io-protocol
+			   Packet#CONNECT (0)
 			   Packet#DISCONNECT (1)
 			   Packet#EVENT (2)
 			   Packet#ACK (3)
@@ -312,7 +253,6 @@ package com.pnwrain.flashsocket
 					if (packet.nsp == this.channel)
 					{
 						this._onConnect(packet);
-
 					}
 					else
 					{
@@ -560,7 +500,6 @@ package com.pnwrain.flashsocket
 			if (webSocket && (connected || connecting)) {
 				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
 				webSocket.removeEventListener(WebSocketEvent.CLOSED, onClose);
-				webSocket.removeEventListener(WebSocketEvent.OPEN, onOpen);
 				webSocket.removeEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
 				webSocket.removeEventListener(IOErrorEvent.IO_ERROR, onIoError);
 				webSocket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
