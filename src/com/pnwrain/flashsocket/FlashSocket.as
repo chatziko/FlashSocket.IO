@@ -424,8 +424,6 @@ package com.pnwrain.flashsocket
 
 		private function _onConnect(packet:Object):void
 		{
-			emitBuffered()
-
 			this.connected = true;
 			this.connecting = false;
 
@@ -435,6 +433,8 @@ package com.pnwrain.flashsocket
 
 			var e:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT);
 			dispatchEvent(e);
+
+			emitBuffered()		// after CONNECT
 		}
 
 		private function keepaliveTimer_timer(e:TimerEvent):void
