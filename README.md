@@ -1,34 +1,34 @@
-
-# Redannicks changes: 
-	updated to work with Socket.IO 1.0 (specifically 1.0.6)
-	flashsocket transport is no longer required - uses polling that upgrages to websocket, same as js client.
-	gimite/web-socket-js updated to most recent version
-	querystring paramater support
-	support for connecting to socket.io securely with ssl
-	FlashSocket has a delegated EventDispatcher so you can replace with your own (for use with robotlegs)
-	No Binary support
-
-
-# NOTES
-
-This isn't the original work of Jimib, this has been forked from git://github.com/simb/FlashSocket.IO.git which had an initial dependence on gimite/web-socket-js
-The original project was only compatible with Flex and I needed a pure AS3 solution so I have tinkered the code and replaced a couple of Flex only classes. The most notable substitution has been of the mx.utils.URLUtil with com.jimisaacs.data.URL. The 2 classes are not directly interchangeable so I do expect some problems as a result.
-
-# CREDIT
-
-[https://github.com/simb/FlashSocket.IO](https://github.com/simb/FlashSocket.IO)
-
-[https://github.com/gimite/web-socket-js](https://github.com/gimite/web-socket-js)
-
-[http://jidd.jimisaacs.com/post/url-as3-class/](http://jidd.jimisaacs.com/post/url-as3-class/)
-
 # FlashSocket.IO
 
-Flash library to facilitate communication between Flex applications and Socket.IO servers.
+Flash client for [Socket.IO](http://socket.io/) version 1.0 and above. Connects
+solely through WebSocket and supports binary data and native TLS (through
+[SecureSocket](http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flash/net/SecureSocket.html)).
 
-The actual websocket communication is taken care of by my fork of gimite/web-socket-js project.
+## Notes for this fork
 
-This project wraps that and facilitates the hearbeat and en/decoding of messages so they work with Socket.IO servers
+This fork is based on
+[redannick/FlashSocket.IO](https://github.com/redannick/FlashSocket.IO) (which
+itself is based on
+[jimib/FlashSocket.IO](https://github.com/jimib/FlashSocket.IO)) and contains
+several improvements and bugfixes:
 
-# Checkout
+ * support for sending/receiving binary data (as
+   [ByteArray](http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flash/utils/ByteArray.html))
+ * use [my fork](https://github.com/chatziko/AS3WebSocket) of
+   [AS3WebSocket](https://github.com/theturtle32/AS3WebSocket), modified to use
+   native SecureSocket for TLS (faster, more sucure, reduces swc size by 86%)
+ * connect directly through WebSocket, without an initial polling request.  
+   There was no polling implementation anyway, only a single initial request,
+   it wasn't possible to receive messages before upgrading to WebSocket. Apart
+   from the extra roundtrip, this had the undesired side-effect that the server
+   thought we are already connected, while the client only considered itself
+   connected after the upgrade.  
+   A full polling implementation might be added in the future.
+ * add ERROR event for handling server-side errors
+ * bugfix: propertly add callback to messages for sending ACK
+ * bugfix: properly clean ACK callbacks
+ * bugfix: emit buffered message after dispatching the CONNECT event
+ * use native [JSON](http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/JSON.html)
+
+Tested with Socket.IO 1.4.
 
