@@ -51,6 +51,7 @@ package com.pnwrain.flashsocket
 			host = parsed.authority + (parsed.port ? ':'+parsed.port : '');
 			query = parsed.query;
 			channel = parsed.path || "/";
+			connecting = true;
 
 			encoder = new Encoder();
 			decoder = new Decoder();
@@ -465,6 +466,9 @@ package com.pnwrain.flashsocket
 
 		public function close():void {
 			if (webSocket && (connected || connecting)) {
+				// some flash player versions throw error if IO_ERROR arrives and is not handled, so add dummy handler
+				webSocket.addEventListener(IOErrorEvent.IO_ERROR, function(e:*):void {});
+
 				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
 				webSocket.removeEventListener(WebSocketEvent.CLOSED, onClose);
 				webSocket.removeEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
