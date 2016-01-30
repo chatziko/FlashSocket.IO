@@ -28,7 +28,11 @@ several improvements and bugfixes:
  * bugfix: propertly add callback to messages for sending ACK
  * bugfix: properly clean ACK callbacks
  * bugfix: emit buffered message after dispatching the CONNECT event
+ * bugfix: stop heartbeat timer when socket abruptly closes
+ * bugfix: dispatch DISCONNECT when connecting is manually close()ed
  * use native [JSON](http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/JSON.html)
+ * remove CLOSE event (unclear semantics), use DISCONNECT instead
+ * add destroy() method (similar to the js socket.io-client)
 
 Tested with Socket.IO 1.4.
 

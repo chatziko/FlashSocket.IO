@@ -127,7 +127,7 @@ package com.pnwrain.flashsocket
 			webSocket = new WebSocket(socketURL, origin, [protocol]);
 
 			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
-			webSocket.addEventListener(WebSocketEvent.CLOSED, onClose);
+			webSocket.addEventListener(WebSocketEvent.CLOSED, _onDisconnect);
 			webSocket.addEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onConnectionFail);
 			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
 			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
@@ -138,12 +138,6 @@ package com.pnwrain.flashsocket
 		protected function onConnectionFail(event:Event):void
 		{
 			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT_ERROR);
-			dispatchEvent(fe);
-		}
-
-		protected function onClose(event:Event):void
-		{
-			var fe:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CLOSE);
 			dispatchEvent(fe);
 		}
 
@@ -203,7 +197,7 @@ package com.pnwrain.flashsocket
 				
 				} else if (message == "3") {
 					// response from server from the ping, so cancel the waiting
-					_pongTimer.stop();
+					_pongTimer.reset();
 
 				// we don't do probing
 				//} else if (message == "3probe") {
@@ -432,6 +426,9 @@ package com.pnwrain.flashsocket
 			_keepaliveTimer.addEventListener(TimerEvent.TIMER, keepaliveTimer_timer);
 			_keepaliveTimer.start()
 
+			_pongTimer = new Timer(heartBeatTimeout, 1);
+			_pongTimer.addEventListener(TimerEvent.TIMER_COMPLETE, pongTimer_timerComplete);
+
 			var e:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.CONNECT);
 			dispatchEvent(e);
 
@@ -440,11 +437,10 @@ package com.pnwrain.flashsocket
 
 		private function keepaliveTimer_timer(e:TimerEvent):void
 		{
-			if (_pongTimer && _pongTimer.running)
+			if (_pongTimer.running)
 				return;
-			_pongTimer = new Timer(heartBeatInterval, 1);
-			_pongTimer.addEventListener(TimerEvent.TIMER_COMPLETE, pongTimer_timerComplete);
 			_pongTimer.start();
+
 			// 2 - ping
 			webSocket.sendUTF("2");
 		}
@@ -452,33 +448,66 @@ package com.pnwrain.flashsocket
 		private function pongTimer_timerComplete(e:TimerEvent):void
 		{
 			fatal("Server Timed Out!!");
-			webSocket.close();
+			close();
 		}
 
-		private function _onDisconnect():void
+		private function _onDisconnect(e:* = null):void
 		{
-			this.connected = false;
-			this.connecting = false;
-			decoder.destroy()
-			var e:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.DISCONNECT);
-			dispatchEvent(e);
+			var dispatch:Boolean = connected
+			destroy()
+
+			if(dispatch) {
+				var disc:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.DISCONNECT);
+				dispatchEvent(disc);
+			}
 		}
 
-		public function close():void {
-			if (webSocket && (connected || connecting)) {
+		// full cleanup
+		public function destroy():void {
+			connected = connecting = false
+
+			if (webSocket) {
 				// some flash player versions throw error if IO_ERROR arrives and is not handled, so add dummy handler
 				webSocket.addEventListener(IOErrorEvent.IO_ERROR, function(e:*):void {});
 
 				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
-				webSocket.removeEventListener(WebSocketEvent.CLOSED, onClose);
+				webSocket.removeEventListener(WebSocketEvent.CLOSED, _onDisconnect);
 				webSocket.removeEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
 				webSocket.removeEventListener(IOErrorEvent.IO_ERROR, onIoError);
 				webSocket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
-				if (_keepaliveTimer)
-					_keepaliveTimer.removeEventListener(TimerEvent.TIMER, keepaliveTimer_timer);
-				if (_pongTimer)
-					_pongTimer.removeEventListener(TimerEvent.TIMER_COMPLETE, pongTimer_timerComplete);
 				webSocket.close();
+				webSocket = null;
+			}
+			if (_keepaliveTimer) {
+				_keepaliveTimer.removeEventListener(TimerEvent.TIMER, keepaliveTimer_timer);
+				_keepaliveTimer.stop();
+				_keepaliveTimer = null;
+			}
+			if (_pongTimer) {
+				_pongTimer.removeEventListener(TimerEvent.TIMER_COMPLETE, pongTimer_timerComplete);
+				_pongTimer.stop();
+				_pongTimer = null;
+			}
+			if (decoder) {
+				decoder.destroy();
+				decoder = null;
+			}
+			encoder = null;
+			acks = null;
+			_receiveBuffer = null;
+		}
+
+		public function close():void {
+			// if connected close socket, we'll destroy when closed
+			if (connected) {
+				// stop timers now
+				_keepaliveTimer.stop();
+				_pongTimer.stop();
+
+				webSocket.close();
+
+			} else {
+				destroy()
 			}
 		}
 	}

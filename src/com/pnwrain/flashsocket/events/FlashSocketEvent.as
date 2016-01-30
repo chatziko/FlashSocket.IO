@@ -4,7 +4,6 @@ package com.pnwrain.flashsocket.events
 
 	public class FlashSocketEvent extends Event
 	{
-		public static const CLOSE:String = "close";
 		public static const CONNECT:String = "connect";
 		public static const MESSAGE:String = "message";
 		public static const IO_ERROR:String = "ioError";
