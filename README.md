@@ -36,3 +36,22 @@ several improvements and bugfixes:
 
 Tested with Socket.IO 1.4.
 
+## Sample client and server
+
+A sample [client](./sample/client.as) and [server](./sample/server.js) are provided.
+To try them:
+
+ * Install dependencies and start server
+ ```
+ cd sample
+ npm install
+ npm start
+ ```
+
+ * Compile the client, eg with ```mxmlc```:
+ ```
+ mxmlc --library-path=bin/Flash-Socket.IO.swc sample/client.as
+ ```
+
+ * Open [http://localhost:3000/](http://localhost:3000/)
+

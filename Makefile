@@ -3,8 +3,9 @@ find = $(foreach dir,$(1),$(foreach d,$(wildcard $(dir)/*),$(call find,$(d),$(2)
 FLEX_HOME?=/usr/local/apache-flex-sdk
 
 all: bin/Flash-Socket.IO.swc
+sample: sample/client.swf
 
-bin/Flash-Socket.IO.swc: $(call find, ., *.as)
+bin/Flash-Socket.IO.swc: $(call find, src, *.as)
 	@mkdir -p bin
 	$(FLEX_HOME)/bin/compc \
 		--source-path=./src \
@@ -13,4 +14,11 @@ bin/Flash-Socket.IO.swc: $(call find, ., *.as)
 		--include-classes=com.pnwrain.flashsocket.FlashSocket \
 		--debug=true \
 		--output=$@
+
+sample/client.swf: sample/client.as bin/Flash-Socket.IO.swc
+	$(FLEX_HOME)/bin/mxmlc \
+		--library-path=bin/Flash-Socket.IO.swc \
+		--debug=true \
+		--output=$@ \
+		sample/client.as
 

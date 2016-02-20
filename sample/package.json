@@ -1,0 +1,11 @@
+{
+  "name": "flashsocket-sample",
+  "version": "0.1.0",
+  "description": "A sample server to connect using FlashSocket.IO",
+  "dependencies": {
+    "express": "^4.13.4",
+    "policyfile": "chatziko/FlashPolicyFileServer",
+    "socket.io": "^1.4.0"
+  },
+  "bin": "./server.js"
+}
