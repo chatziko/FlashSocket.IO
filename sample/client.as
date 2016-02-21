@@ -3,8 +3,6 @@ package {
 import flash.display.Sprite;
 import flash.external.ExternalInterface;
 import flash.text.TextField;
-
-import flash.utils.setTimeout;
 import flash.utils.ByteArray;
 
 import com.pnwrain.flashsocket.FlashSocket;
@@ -62,16 +60,19 @@ public class client extends Sprite {
 			cb(ba);
 		})
 
-		socket.addEventListener(FlashSocketEvent.SECURITY_ERROR, function(e:Object):void {
+		socket.addEventListener(FlashSocketEvent.DISCONNECT, function(e:FlashSocketEvent):void {
+			log("disconnect");
+		});
+		socket.addEventListener(FlashSocketEvent.SECURITY_ERROR, function(e:FlashSocketEvent):void {
 			log("security error");
 		});
-		socket.addEventListener(FlashSocketEvent.CONNECT_ERROR, function(e:Object):void {
+		socket.addEventListener(FlashSocketEvent.CONNECT_ERROR, function(e:FlashSocketEvent):void {
 			log("connect error");
 		});
-		socket.addEventListener(FlashSocketEvent.IO_ERROR, function(e:Object):void {
+		socket.addEventListener(FlashSocketEvent.IO_ERROR, function(e:FlashSocketEvent):void {
 			log("io error");
 		});
-		socket.addEventListener(FlashSocketEvent.ERROR, function(e:Object):void {
+		socket.addEventListener(FlashSocketEvent.ERROR, function(e:FlashSocketEvent):void {
 			log("error");
 		});
 	}
