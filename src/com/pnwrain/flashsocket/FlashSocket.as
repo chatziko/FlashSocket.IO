@@ -43,7 +43,7 @@ package com.pnwrain.flashsocket
 		private var encoder:Encoder;
 		private var decoder:Decoder;
 
-		public function FlashSocket(uri:String, ...ignore) // ...ignore is for compatibility
+		public function FlashSocket(uri:String, certificates:Array = null)
 		{
 			var parsed:URI = new URI(uri)
 
@@ -57,7 +57,7 @@ package com.pnwrain.flashsocket
 			decoder = new Decoder();
 			decoder.addEventListener(ParserEvent.DECODED, onDecoded);
 
-			connectSocket();
+			connectSocket(certificates);
 		}
 
 		/*
@@ -118,7 +118,7 @@ package com.pnwrain.flashsocket
 			heartBeatInterval = opts.pingInterval;
 		}
 
-		protected function connectSocket(event:Event = null):void
+		protected function connectSocket(certificates:Array):void
 		{
 			// no sid cause we're not upgrading
 			var socketURL:String = (protocol == 'https' ? 'wss' : 'ws') + "://" + host + "/socket.io/?EIO=3&transport=websocket" + (query ? "&"+query : "");
@@ -131,6 +131,9 @@ package com.pnwrain.flashsocket
 			webSocket.addEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onConnectionFail);
 			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
 			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
+
+			for each(var cert:ByteArray in certificates)
+				webSocket.addBinaryChainBuildingCertificate(cert, true);
 
 			webSocket.connect();
 		}
