@@ -37,9 +37,9 @@ package com.pnwrain.flashsocket.transports {
 
 			webSocket = new com.worlize.websocket.WebSocket(socketURL, origin, [protocol]);
 
-			webSocket.addEventListener(WebSocketEvent.OPEN, onOpen);
+			webSocket.addEventListener(WebSocketEvent.OPEN, onWSOpen);
 			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);
-			webSocket.addEventListener(WebSocketEvent.CLOSED, onClose);
+			webSocket.addEventListener(WebSocketEvent.CLOSED, onWSClose);
 			webSocket.addEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onConnectionFail);
 			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
 			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
@@ -51,24 +51,18 @@ package com.pnwrain.flashsocket.transports {
 		}
 
 		override public function close():void {
-			if (webSocket) {
-				// some flash player versions throw error if IO_ERROR arrives and is not handled, so add dummy handler
-				webSocket.addEventListener(IOErrorEvent.IO_ERROR, function(e:*):void {});
+			if(readyState != 'opening' && readyState != 'open')
+				return;
+			var connected:Boolean = webSocket.connected;	// might lose it after close()
 
-				webSocket.removeEventListener(WebSocketEvent.OPEN, onOpen);
-				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
-				webSocket.removeEventListener(WebSocketEvent.CLOSED, onClose);
-				webSocket.removeEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
-				webSocket.removeEventListener(IOErrorEvent.IO_ERROR, onIoError);
-				webSocket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
-				webSocket.close();
-				webSocket = null;
-			}
-			writable = false
-			emit('close')
+			webSocket.close();
+
+			// close event won't come unless we're connected
+			if(!connected)
+				onWSClose(null);
 		}
 
-		// send an engine.io packet:
+		// sends a sequence of engine.io packets:
 		// {
 		//    type: close (1) | ping (2) | pong (3) | message (4) | upgrade (5)
 		//    data: String (for text packets) | ByteArray (for binary packets)
@@ -79,7 +73,7 @@ package com.pnwrain.flashsocket.transports {
 			writable = false;
 
 			for(var i:Number = 0; i < packets.length; i++) {
-				var type:int = packetTypes[packets[i].type];
+				var type:int = typeCodes[packets[i].type];
 				var data:*  = packets[i].data || '';
 
 				if(data is String) {
@@ -102,28 +96,46 @@ package com.pnwrain.flashsocket.transports {
 			}, 0);
 		}
 
-		private function onOpen(e:WebSocketEvent):void {
-			writable = true
+		private function onWSOpen(e:WebSocketEvent):void {
+			super.onOpen();
 		}
 
 		private function onMessage(e:WebSocketEvent):void {
-			emit('packet', e.message);
+			var packet:Object = decodePacket(e.message.type == 'utf8' ? e.message.utf8Data : e.message.binaryData);
+			socket.log('decoded packet', packet, packet.data is String);
+			super.onPacket(packet);
 		}
 
-		private function onClose(e:WebSocketEvent):void {
-			close();
+		private function onWSClose(e:WebSocketEvent):void {
+			cleanup();
+			super.onClose();
 		}
 
 		private function onConnectionFail(event:flash.events.Event):void {
-			emit('error', FlashSocketEvent.CONNECT_ERROR);
+			super.onError(FlashSocketEvent.CONNECT_ERROR);
 		}
 
 		private function onIoError(event:flash.events.Event):void {
-			emit('error', FlashSocketEvent.IO_ERROR);
+			super.onError(FlashSocketEvent.IO_ERROR);
 		}
 
 		private function onSecurityError(event:flash.events.Event):void {
-			emit('error', FlashSocketEvent.SECURITY_ERROR);
+			super.onError(FlashSocketEvent.SECURITY_ERROR);
+		}
+
+		private function cleanup():void {
+			if(webSocket) {
+				// some flash player versions throw error if IO_ERROR arrives and is not handled, so add dummy handler
+				webSocket.addEventListener(IOErrorEvent.IO_ERROR, function(e:*):void {});
+
+				webSocket.removeEventListener(WebSocketEvent.OPEN, onWSOpen);
+				webSocket.removeEventListener(WebSocketEvent.MESSAGE, onMessage);
+				webSocket.removeEventListener(WebSocketEvent.CLOSED, onWSClose);
+				webSocket.removeEventListener(WebSocketErrorEvent.CONNECTION_FAIL, onIoError);
+				webSocket.removeEventListener(IOErrorEvent.IO_ERROR, onIoError);
+				webSocket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
+				webSocket = null;
+			}
 		}
 	}
 }

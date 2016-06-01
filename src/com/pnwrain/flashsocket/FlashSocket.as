@@ -18,9 +18,9 @@ package com.pnwrain.flashsocket
 
 	public class FlashSocket extends EventDispatcher
 	{
-		protected var debug:Boolean = true;
+		public var debug:Boolean = false;
 
-		public var sessionID:String;
+		public var id:String;
 
 		public var host:String;
 		public var protocol:String;
@@ -68,8 +68,7 @@ package com.pnwrain.flashsocket
 
 			opts = opts || {};
 			certificates = opts.certificates;
-//			transports = opts.transports || ['polling', 'websocket'];
-			transports = opts.transports || ['websocket'];
+			transports = opts.transports || ['polling', 'websocket'];
 
 			open();
 		}
@@ -112,7 +111,7 @@ package com.pnwrain.flashsocket
 		protected function onHandshake(opts:Object):void {
 			log('handshake', opts);
 
-			sessionID = opts.sid;
+			id = opts.sid;
 			upgrades = opts.upgrades.filter(function(u:*):* { return ~transports.indexOf(u) });
 			pingTimeout = opts.pingTimeout;
 			pingInterval = opts.pingInterval;
@@ -142,6 +141,7 @@ package com.pnwrain.flashsocket
 			pingTimeoutTimer = setTimeout(function ():void {
 				if('closed' == readyState)
 					return;
+				log("onHeartbeat closing", timeout)
 				close();
 			}, timeout);
 		};
@@ -159,7 +159,7 @@ package com.pnwrain.flashsocket
 		};
 
 		// sends engine.io packet
-		private function sendPacket(type:String, data:* = null, options:Object = null):void {
+		private function sendPacket(type:String, data:* = null, options:Object = null, doFlush:Boolean = true):void {
 			if('closing' == readyState || 'closed' == readyState)
 				return;
 
@@ -172,7 +172,9 @@ package com.pnwrain.flashsocket
 				options: options
 			};
 			writeBuffer.push(packet);
-			flush();
+
+			if(doFlush)
+				flush();
 		};
 
 		private function flush():void {
@@ -199,50 +201,31 @@ package com.pnwrain.flashsocket
 			   , upgrade:  5
 			   , noop:     6
 			 */
-			 if(readyState != 'opening' && readyState != 'open') {
+			if(readyState != 'opening' && readyState != 'open') {
 				log('packet received with socket readyState ' + readyState);
 				return;
 			}
 
 			// Socket is live - any packet counts
-			onHeartbeat(pingInterval + pingTimeout);
+			if(readyState == 'open')
+				onHeartbeat(pingInterval + pingTimeout);
 
-			if(e.data.type == 'utf8') {
-				// utf8 message
-				var message:String = decodeURIComponent(e.data.utf8Data);
+			var packet:Object = e.data;
+			if (packet.type == 'open') {
+				// data is a json connection options
+				onHandshake(JSON.parse(packet.data));
 
-				if (message.charAt(0) == "0") {
-					// the rest of the message is a json with connection options
-					var opts:Object = JSON.parse(message.substr(1));
-					onHandshake(opts);
+			} else if(packet.type == "pong") {
+				log('pong')
+				setPing();
 
-				} else if (message == "3") {
-					log('pong')
-					setPing();
+			// we don't do probing
+			//} else if (message == "3probe") {
+				// send the upgrade packet.
+				//webSocket.sendUTF("5");
 
-				// we don't do probing
-				//} else if (message == "3probe") {
-					// send the upgrade packet.
-					//webSocket.sendUTF("5");
-
-				} else if (message.charAt(0) == "4") {
-					decoder.add(message.substr(1))
-				}
-
-			} else {
-				// binary message
-				var data:ByteArray = e.data.binaryData;
-				var type:Number = data.readUnsignedByte()
-
-				if(type == 4) {
-					// remove first byte without copy
-					data.position = 0;
-					data.writeBytes(data, 1, data.length - 1);
-					data.length--;
-					data.position = 0;	// ready to read
-
-					decoder.add(data);
-				}
+			} else if (packet.type == 'message') {
+				decoder.add(packet.data);
 			}
 		}
 
@@ -259,18 +242,21 @@ package com.pnwrain.flashsocket
 		};
 
 		private function onTransportClose(e:Event = null):void {
-			log('transport closed')
+			log('transport closed', connected)
 
-			var dispatch:Boolean = connected
+			var dispatch:String =
+				connected  ? FlashSocketEvent.DISCONNECT :
+				connecting ? FlashSocketEvent.CONNECT_ERROR :
+				null;
+
 			destroy()
 
-			if(dispatch) {
-				var disc:FlashSocketEvent = new FlashSocketEvent(FlashSocketEvent.DISCONNECT);
-				dispatchEvent(disc);
-			}
+			if(dispatch)
+				dispatchEvent(new FlashSocketEvent(dispatch));
 		};
 
 		private function onTransportError(e:Event):void {
+			log('transport error', e.data)
 			destroy()
 
 			var fe:FlashSocketEvent = new FlashSocketEvent(e.data);
@@ -381,7 +367,8 @@ package com.pnwrain.flashsocket
 		//
 		private function sendSioPacket(packet:Object):void {
 			for each (var ioPacket:Object in encoder.encode(packet))
-				sendPacket('message', ioPacket);
+				sendPacket('message', ioPacket, null, false);
+			flush();
 		}
 
 		public function emit(event:String, msg:Object, callback:Function = null):void
@@ -476,7 +463,7 @@ package com.pnwrain.flashsocket
 
 		public function close():void {
 			// if connected close socket, we'll destroy when closed
-			if (connected) {
+			if (connected || connecting) {
 				// stop timers now
 				clearTimeout(pingIntervalTimer);
 				clearTimeout(pingTimeoutTimer);
@@ -496,7 +483,7 @@ package com.pnwrain.flashsocket
 		{
 			if (debug)
 			{
-				trace("webSocketLog: " + args.join(' '));
+				trace("webSocketLog: " + args.map(function(a:*, ...r):String { return JSON.stringify(a) }).join(' '));
 
 				if(ExternalInterface.available) {
 					args.unshift('console.log');
