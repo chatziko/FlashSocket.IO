@@ -12,18 +12,14 @@ itself is based on
 [jimib/FlashSocket.IO](https://github.com/jimib/FlashSocket.IO)) and contains
 several improvements and bugfixes:
 
+ * support for both polling and websockets
+ * upgrade support (by default connect with polling and upgrade to websocket later)
  * support for sending/receiving binary data (as
    [ByteArray](http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flash/utils/ByteArray.html))
  * use [my fork](https://github.com/chatziko/AS3WebSocket) of
    [AS3WebSocket](https://github.com/theturtle32/AS3WebSocket), modified to use
    native SecureSocket for TLS (faster, more sucure, reduces swc size by 86%)
- * connect directly through WebSocket, without an initial polling request.  
-   There was no polling implementation anyway, only a single initial request,
-   it wasn't possible to receive messages before upgrading to WebSocket. Apart
-   from the extra roundtrip, this had the undesired side-effect that the server
-   thought we are already connected, while the client only considered itself
-   connected after the upgrade.  
-   A full polling implementation might be added in the future.
+ * separate engine.io client code
  * add ERROR event for handling server-side errors
  * bugfix: propertly add callback to messages for sending ACK
  * bugfix: properly clean ACK callbacks
