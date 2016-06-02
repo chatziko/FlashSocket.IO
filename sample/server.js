@@ -43,23 +43,32 @@ if(cert)
 	policyfile.createServer().listen(-1, masterHttps)
 
 // socket.io server
-var io = new ioServer(masterHttp)
+var io = new ioServer(masterHttp, {
+	pingInterval: 5000,
+	pingTimeout: 5000,
+})
 if(cert)
 	io.attach(masterHttps)
 
 io.on('connection', function(socket) {
 	console.log('client connected')
 
-	console.log('sending foo')
-	socket.emit('foo', 'bar', function(buf) {
-		console.log('foo: got back', buf)
-	})
+	setTimeout(function() {
+		console.log('sending foo')
+		socket.emit('foo', 'bar', function(buf) {
+			console.log('foo: got back', buf)
+		})
+	}, 1000)
 
 	socket.on('bar', function(s, cb) {
 		console.log("got 'bar' from client with data: " + s)
 		console.log("sending back Buffer with 2 bytes")
 
 		cb(new Buffer([1, 2]))
+	})
+
+	socket.on('disconnect', function() {
+		console.log('client disconnected');
 	})
 })
 

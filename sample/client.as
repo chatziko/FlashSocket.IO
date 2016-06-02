@@ -16,13 +16,18 @@ public class client extends Sprite {
 
 	// log in the TextField, via trace, and with console.log
 	//
-	public function log(msg:*):void {
-		txt.appendText(msg + "\n");
+	public function log(...args):void {
+		if(socket)
+			args.unshift(socket.transport)
 
-		trace(msg);
+		txt.appendText(args.join(' ') + "\n")
 
-		if(ExternalInterface.available)
-			ExternalInterface.call("console.log", msg);
+		trace(args.join(' '))
+
+		if(ExternalInterface.available) {
+			args.unshift('console.log');
+			ExternalInterface.call.apply(ExternalInterface, args)
+		}
 	}
 
 
@@ -31,6 +36,8 @@ public class client extends Sprite {
 		txt.width = 1000;
 		txt.height = 1000;
 		addChild(txt);
+
+		FlashSocket.debug = true;
 
 		// connect to the same url as the page we're in
 		var url:String = ExternalInterface.call("window.location.href.toString");
@@ -43,7 +50,7 @@ public class client extends Sprite {
 
 			log("sending bar")
 			socket.emit('bar', 'foo', function(ba:ByteArray):void {
-				log('bar: got back ByteArray: ' + ba[0] + ", " + ba[1]);
+				log('bar: got back ByteArray: ', ba[0], ba[1]);
 			});
 		});
 
