@@ -47,6 +47,10 @@ package com.pnwrain.flashsocket {
 			open();
 		}
 
+		public function get transport():String {
+			return engine && engine.transport ? engine.transport.name : null;
+		}
+
 		private function open():void {
 			connecting = true;
 

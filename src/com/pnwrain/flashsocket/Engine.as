@@ -72,7 +72,6 @@ package com.pnwrain.flashsocket
 
 		// probes a transport
 		private function probe(name:String):void {
-		return;
 			FlashSocket.log('probing transport ', name);
 			var newtransport:Transport = Transport.create(name, opts);
 			var failed:Boolean = false;
@@ -82,7 +81,8 @@ package com.pnwrain.flashsocket
 
 				FlashSocket.log('probe transport "%s" opened', name);
 				newtransport.send([{ type: 'ping', data: 'probe' }]);
-				newtransport.once('packet', function(msg:Object):void {
+				newtransport.once('packet', function(e:FlashSocketEvent):void {
+					var msg:Object = e.data;
 					if (failed) return;
 					if ('pong' == msg.type && 'probe' == msg.data) {
 						FlashSocket.log('probe transport "%s" pong', name);
@@ -167,7 +167,7 @@ package com.pnwrain.flashsocket
 			once('close', onclose);
 			once('upgrading', onupgrade);
 
-			transport.open();
+			newtransport.open();
 
 		} // proble
 
@@ -175,7 +175,7 @@ package com.pnwrain.flashsocket
 			FlashSocket.log('handshake', hs);
 
 			opts.sid = hs.sid;
-			upgrades = (hs.upgrades || []).filter(function(u:*):* { return ~opts.transports.indexOf(u) });
+			upgrades = hs.upgrades.filter(function(u:*):* { return opts.transports.indexOf(u) != -1 });
 			pingTimeout = hs.pingTimeout;
 			pingInterval = hs.pingInterval;
 
@@ -190,7 +190,7 @@ package com.pnwrain.flashsocket
 			// we check for `readyState` in case an `open`
 			// listener already closed the socket
 			if ('open' == readyState && opts.upgrade && transport.pausable) {
-				FlashSocket.log('starting upgrade probes');
+				FlashSocket.log('starting upgrade probes', upgrades);
 				for(var i:int = 0; i < upgrades.length; i++)
 					probe(upgrades[i]);
 			}
