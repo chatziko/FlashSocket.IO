@@ -2,16 +2,17 @@ package com.pnwrain.flashsocket
 {
 	import flash.utils.ByteArray;
 
+	import com.pnwrain.flashsocket.FlashSocket;
 	import com.pnwrain.flashsocket.events.EventEmitter;
 	import com.pnwrain.flashsocket.transports.WebSocket;
 	import com.pnwrain.flashsocket.transports.Polling;
 
 	public class Transport extends EventEmitter {
 
-		static public function create(transport:String, socket:FlashSocket):Transport {
+		static public function create(transport:String, opts:Object):Transport {
 			return transport == 'polling'
-				? new Polling(socket)
-				: new WebSocket(socket);
+				? new Polling(opts)
+				: new WebSocket(opts);
 		};
 
 		static protected const typeCodes:Object = {
@@ -29,13 +30,14 @@ package com.pnwrain.flashsocket
 
 
 		public var name:String;
-		protected var socket:FlashSocket;
 		protected var readyState:String;
+		public var opts:Object;
 		public var writable:Boolean = false;
+		public var pausable:Boolean = false;
 
 
-		public function Transport(psocket:FlashSocket) {
-			socket = psocket;
+		public function Transport(popts:Object) {
+			opts = popts;
 		}
 
 		public function open():void {
@@ -46,6 +48,9 @@ package com.pnwrain.flashsocket
 		}
 
 		public function send(packets:Array):void {
+		}
+
+		public function pause(cb:Function):void {
 		}
 
 		protected function decodePacket(data:*):Object {
@@ -78,22 +83,22 @@ package com.pnwrain.flashsocket
 		protected function onOpen():void {
 			readyState = 'open';
 			writable = true;
-			emit('open');
+			_emit('open');
 		}
 
 		protected function onClose():void {
 			writable = false
 			readyState = 'closed';
-			emit('close');
+			_emit('close');
 		}
 
 		protected function onPacket(packet:Object):void {
-			emit('packet', packet);
+			_emit('packet', packet);
 		}
 
 		protected function onError(err:String):void {
-			socket.log('transport error', err);
-			emit('error', err);
+			FlashSocket.log('transport error', err);
+			_emit('error', err);
 		}
 	}
 }

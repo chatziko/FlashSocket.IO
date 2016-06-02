@@ -18,8 +18,8 @@ package com.pnwrain.flashsocket.transports {
 
 		private var webSocket:com.worlize.websocket.WebSocket;
 
-		public function WebSocket(psocket:FlashSocket) {
-			super(psocket);
+		public function WebSocket(popts:Object) {
+			super(popts);
 
 			name = 'websocket';
 		}
@@ -28,11 +28,13 @@ package com.pnwrain.flashsocket.transports {
 			super.open()
 
 			// no sid cause we're not upgrading
-			var protocol:String = socket.protocol;
-			var host:String = socket.host;
-			var query:String = socket.query;
+			var protocol:String = opts.protocol;
+			var host:String = opts.host;
+			var query:String = opts.query;
+			var sid:String = opts.sid;
 
-			var socketURL:String = (protocol == 'https' ? 'wss' : 'ws') + "://" + host + "/socket.io/?EIO=3&transport=websocket" + (query ? "&"+query : "");
+			var socketURL:String = (protocol == 'https' ? 'wss' : 'ws') + "://" + host +
+				"/socket.io/?EIO=3&transport=websocket" + (query ? "&"+query : "") + (sid ? "&sid="+sid : "");
 			var origin:String = protocol + "://" + host.toLowerCase();
 
 			webSocket = new com.worlize.websocket.WebSocket(socketURL, origin, [protocol]);
@@ -44,7 +46,7 @@ package com.pnwrain.flashsocket.transports {
 			webSocket.addEventListener(IOErrorEvent.IO_ERROR, onIoError);
 			webSocket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSecurityError);
 
-			for each(var cert:ByteArray in socket.certificates)
+			for each(var cert:ByteArray in opts.certificates)
 				webSocket.addBinaryChainBuildingCertificate(cert, true);
 
 			webSocket.connect();
@@ -92,7 +94,7 @@ package com.pnwrain.flashsocket.transports {
 			// defer to next tick to allow Socket to clear writeBuffer
 			setTimeout(function():void {
 				writable = true;
-				emit('drain');
+				_emit('drain');
 			}, 0);
 		}
 
@@ -102,7 +104,7 @@ package com.pnwrain.flashsocket.transports {
 
 		private function onMessage(e:WebSocketEvent):void {
 			var packet:Object = decodePacket(e.message.type == 'utf8' ? e.message.utf8Data : e.message.binaryData);
-			socket.log('decoded packet', packet, packet.data is String);
+			FlashSocket.log('decoded packet', packet, packet.data is String);
 			super.onPacket(packet);
 		}
 

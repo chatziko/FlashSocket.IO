@@ -19,10 +19,11 @@ package com.pnwrain.flashsocket.transports {
 		private var sendLoader:URLLoader;
 
 
-		public function Polling(psocket:FlashSocket) {
-			super(psocket);
+		public function Polling(popts:Object) {
+			super(popts);
 
 			name = 'polling';
+			pausable = true;
 		}
 
 		override public function open():void {
@@ -32,11 +33,10 @@ package com.pnwrain.flashsocket.transports {
 		}
 
 		private function request(data:* = null):URLRequest {
-			var protocol:String = socket.protocol;
-			var host:String = socket.host;
-			var query:String = socket.query;
-			var sid:String = socket.id;
-
+			var protocol:String = opts.protocol;
+			var host:String = opts.host;
+			var query:String = opts.query;
+			var sid:String = opts.sid;
 
 			var req:URLRequest = new URLRequest();
 			req.method = (data ? 'POST' : 'GET');
@@ -51,7 +51,7 @@ package com.pnwrain.flashsocket.transports {
 		private function poll():void {
 			polling = true;
 
-			socket.log('polling');
+			FlashSocket.log('polling');
 
 			pollLoader = new URLLoader();
 			pollLoader.dataFormat = 'binary';
@@ -63,6 +63,7 @@ package com.pnwrain.flashsocket.transports {
 		}
 
 		override public function close():void {
+			FlashSocket.log("Polling.close", readyState)
 			if(readyState == 'opening') {
 				// opening phase, wait until we're open and then close
 				//
@@ -77,7 +78,7 @@ package com.pnwrain.flashsocket.transports {
 
 				// close as soon as the message is sent
 				once('drain', function(e:Event):void {
-				socket.log('close on drain')
+					FlashSocket.log('Polling: close message send, closing')
 					cleanup();
 					onClose();
 				})
@@ -105,11 +106,46 @@ package com.pnwrain.flashsocket.transports {
 			sendLoader.load(request(data));
 		}
 
+		// pauses polling, calls cb() after current polling/sending is finished
+		override public function pause(cb:Function):void {
+			readyState = 'pausing';
+
+			function pause():void {
+				FlashSocket.log('paused');
+				readyState = 'paused';
+				cb();
+			}
+
+			if(polling || !writable) {
+				var total:int = 0;
+
+				if(polling) {
+					FlashSocket.log('we are currently polling - waiting to pause');
+					total++;
+					once('pollComplete', function(e:*):void {
+						FlashSocket.log('pre-pause polling complete');
+						--total || pause();
+					});
+				}
+
+				if(!writable) {
+					FlashSocket.log('we are currently writing - waiting to pause');
+					total++;
+					once('drain', function(e:*):void {
+						FlashSocket.log('pre-pause writing complete');
+						--total || pause();
+					});
+				}
+			} else {
+				pause();
+			}
+		}
+
 		private function onPollData(e:Event):void {
 			var packets:Array = decodePayload(e.target.data);
 
 			for each(var packet:Object in packets) {
-				socket.log('polling decoded packet ', packet, packet.data is String);
+				FlashSocket.log('polling decoded packet ', packet, packet.data is String);
 
 				// if its a close packet, we close the ongoing requests
 				if('close' == packet.type) {
@@ -131,11 +167,12 @@ package com.pnwrain.flashsocket.transports {
 			if ('closed' != readyState) {
 				// if we got data we're not polling
 				polling = false;
+				_emit('pollComplete');
 
 				if('open' == readyState)
 					poll();
 				else
-					socket.log('ignoring poll - transport state ', readyState);
+					FlashSocket.log('stopping poll - transport state ', readyState);
 			}
 		}
 
@@ -148,7 +185,7 @@ package com.pnwrain.flashsocket.transports {
 			if(event.status == 200) {
 				// suuccess
 				writable = true;
-				emit('drain');
+				_emit('drain');
 			} else
 				super.onError(FlashSocketEvent.IO_ERROR);
 		}
