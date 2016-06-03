@@ -9,6 +9,7 @@ package com.pnwrain.flashsocket.transports {
 	import flash.net.URLLoader;
 
 	import com.pnwrain.flashsocket.FlashSocket;
+	import com.pnwrain.flashsocket.Yeast;
 	import com.pnwrain.flashsocket.Transport;
 	import com.pnwrain.flashsocket.events.FlashSocketEvent;
 
@@ -17,6 +18,7 @@ package com.pnwrain.flashsocket.transports {
 		private var polling:Boolean = false;
 		private var pollLoader:URLLoader;
 		private var sendLoader:URLLoader;
+		private var yeast:Yeast = new Yeast();
 
 
 		public function Polling(popts:Object) {
@@ -43,7 +45,7 @@ package com.pnwrain.flashsocket.transports {
             req.contentType = 'application/octet-stream';
 			req.data = data;
 			req.url = protocol + "://" + host + "/socket.io/?EIO=3&transport=polling" +
-				"&time=" + new Date().getTime() + (query ? "&"+query : "") + (sid ? "&sid="+sid : "");
+				"&t=" + yeast.next() + (sid ? "&sid="+sid : query ? "&"+query : "");
 
 			return req;
 		}
