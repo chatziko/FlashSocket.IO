@@ -45,7 +45,7 @@ package com.pnwrain.flashsocket.transports {
             req.contentType = 'application/octet-stream';
 			req.data = data;
 			req.url = protocol + "://" + host + "/socket.io/?EIO=3&transport=polling" +
-				"&t=" + yeast.next() + (sid ? "&sid="+sid : query ? "&"+query : "");
+				"&t=" + yeast.next() + (sid ? "&sid="+sid : "") + (query ? "&"+query : "");
 
 			return req;
 		}

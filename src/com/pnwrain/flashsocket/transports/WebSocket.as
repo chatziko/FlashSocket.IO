@@ -34,7 +34,7 @@ package com.pnwrain.flashsocket.transports {
 			var sid:String = opts.sid;
 
 			var socketURL:String = (protocol == 'https' ? 'wss' : 'ws') + "://" + host +
-				"/socket.io/?EIO=3&transport=websocket" + (sid ? "&sid="+sid : query ? "&"+query : "");
+				"/socket.io/?EIO=3&transport=websocket" + (sid ? "&sid="+sid : "") + (query ? "&"+query : "");
 			var origin:String = protocol + "://" + host.toLowerCase();
 
 			webSocket = new com.worlize.websocket.WebSocket(socketURL, origin, [protocol]);
