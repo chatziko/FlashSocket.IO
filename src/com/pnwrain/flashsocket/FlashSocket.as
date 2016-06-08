@@ -16,6 +16,7 @@ package com.pnwrain.flashsocket {
 		public static var debug:Boolean = false;
 
 		private var opts:Object;
+		private var _uri:String;
 
 		private var engine:Engine;
 
@@ -30,21 +31,30 @@ package com.pnwrain.flashsocket {
 		private var decoder:Decoder;
 
 
-		public function FlashSocket(uri:String, popts:Object = null) {
+		public function FlashSocket(puri:String, popts:Object = null) {
 			opts = popts || {};
-
-			var parsed:URI = new URI(uri)
-
-			opts.protocol = parsed.scheme;
-			opts.host = parsed.authority + (parsed.port ? ':'+parsed.port : '');
-			opts.query = parsed.query;
-			opts.channel = parsed.path || "/";
+			uri = puri;
 
 			encoder = new Encoder();
 			decoder = new Decoder();
 			decoder.addEventListener(ParserEvent.DECODED, onDecoded);
 
 			open();
+		}
+
+		public function get uri():String {
+			return _uri;
+		}
+
+		public function	set uri(puri:String):void {
+			_uri = puri;
+
+			var parsed:URI = new URI(puri)
+
+			opts.protocol = parsed.scheme;
+			opts.host = parsed.authority + (parsed.port ? ':'+parsed.port : '');
+			opts.query = parsed.query;
+			opts.channel = parsed.path || "/";
 		}
 
 		public function get transport():String {
