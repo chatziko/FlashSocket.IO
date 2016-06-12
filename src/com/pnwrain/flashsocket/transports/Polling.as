@@ -214,9 +214,10 @@ package com.pnwrain.flashsocket.transports {
 		private function encodePayload(packets:Array):ByteArray {
 			var ba:ByteArray = new ByteArray();
 
-			function writeLength(length:String):void {
-				for(var i:int = 0; i < length.length; i++)
-					ba.writeByte(int(length.charAt(i)));
+			function writeLength(len:int):void {
+				var slen:String = ""+len;
+				for(var i:int = 0; i < slen.length; i++)
+					ba.writeByte(int(slen.charAt(i)));
 				ba.writeByte(255);
 			}
 
