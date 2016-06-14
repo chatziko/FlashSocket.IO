@@ -32,7 +32,7 @@ package com.pnwrain.flashsocket
 
 		public function Engine(popts:Object) {
 			opts = popts;
-			opts.transports = opts.transports || ['polling', 'websocket'];
+			opts.transports = opts.transports ? opts.transports.concat() : ['polling', 'websocket'];
 			opts.upgrade = opts.upgrade !== false;
 
 			open();
@@ -319,25 +319,34 @@ package com.pnwrain.flashsocket
 			transport.removeListener('packet', onPacket);
 			transport.removeListener('error',  onError);
 
-			// set ready state
-			readyState = 'closed';
+			if('opening' == readyState && opts.transports.length > 1) {
+				// try next transport
+				opts.transports.shift();
+				open();
 
-			// clear session id
-			opts.sid = null;
+			 } else {
+				// set ready state
+				readyState = 'closed';
 
-			// emit close event
-			_emit('close', reason);
+				// clear session id
+				opts.sid = null;
 
-			// clean buffers after, so users can still
-			// grab the buffers on `close` event
-			writeBuffer = [];
-			prevBufferLen = 0;
+				// emit close event
+				_emit('close', reason);
+
+				// clean buffers after, so users can still
+				// grab the buffers on `close` event
+				writeBuffer = [];
+				prevBufferLen = 0;
+			}
 		};
 
 		private function onError(e:Object):void {
 			FlashSocket.log('transport error', e.data)
 
-			_emit('error', e.data);
+			// emit 'error' unless we're going to try another transport
+			if(!('opening' == readyState && opts.transports.length > 1))
+				_emit('error', e.data);
 
 			onClose({ data: 'transport error: '+e.data });
 		}
