@@ -109,7 +109,6 @@ package com.pnwrain.flashsocket.transports {
 		}
 
 		private function onWSClose(e:WebSocketEvent):void {
-			cleanup();
 			super.onClose();
 		}
 
@@ -125,7 +124,7 @@ package com.pnwrain.flashsocket.transports {
 			super.onError(FlashSocketEvent.SECURITY_ERROR);
 		}
 
-		private function cleanup():void {
+		override protected function cleanup():void {
 			if(webSocket) {
 				// some flash player versions throw error if IO_ERROR arrives and is not handled, so add dummy handler
 				webSocket.addEventListener(IOErrorEvent.IO_ERROR, function(e:*):void {});

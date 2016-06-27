@@ -81,7 +81,6 @@ package com.pnwrain.flashsocket.transports {
 				// close as soon as the message is sent
 				once('drain', function(e:Event):void {
 					FlashSocket.log('Polling: close message send, closing')
-					cleanup();
 					onClose();
 				})
 			}
@@ -151,7 +150,6 @@ package com.pnwrain.flashsocket.transports {
 
 				// if its a close packet, we close the ongoing requests
 				if('close' == packet.type) {
-					cleanup();
 					super.onClose();
 					return;
 				}
@@ -268,7 +266,7 @@ package com.pnwrain.flashsocket.transports {
 			return packets;
 		}
 
-		private function cleanup():void {
+		override protected function cleanup():void {
 			if(pollLoader) {
 				pollLoader.addEventListener(IOErrorEvent.IO_ERROR, function(e:*):void {}); // ignore future errors
 				pollLoader.removeEventListener(Event.COMPLETE, onPollData);

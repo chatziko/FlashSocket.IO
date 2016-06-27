@@ -1,8 +1,11 @@
 package com.pnwrain.flashsocket
 {
 	import flash.utils.ByteArray;
+	import flash.utils.setTimeout;
+	import flash.utils.clearTimeout;
 
 	import com.pnwrain.flashsocket.FlashSocket;
+	import com.pnwrain.flashsocket.events.FlashSocketEvent;
 	import com.pnwrain.flashsocket.events.EventEmitter;
 	import com.pnwrain.flashsocket.transports.WebSocket;
 	import com.pnwrain.flashsocket.transports.Polling;
@@ -34,6 +37,7 @@ package com.pnwrain.flashsocket
 		public var opts:Object;
 		public var writable:Boolean = false;
 		public var pausable:Boolean = false;
+		private var connectTimeoutTimer:int = 0;
 
 
 		public function Transport(popts:Object) {
@@ -42,6 +46,8 @@ package com.pnwrain.flashsocket
 
 		public function open():void {
 			readyState = 'opening';
+
+			connectTimeoutTimer = setTimeout(onConnectTimeout, opts.connectTimeout || 20000);
 		}
 
 		public function close():void {
@@ -79,16 +85,31 @@ package com.pnwrain.flashsocket
 			return packet;
 		}
 
+		private function onConnectTimeout():void {
+			onError(FlashSocketEvent.CONNECT_ERROR);
+		}
+
+		// should be overrided by subclasses
+		protected function cleanup():void {
+		}
+
 		// methods to be called by subclasses on various events
 		protected function onOpen():void {
 			readyState = 'open';
 			writable = true;
+
+			clearTimeout(connectTimeoutTimer)
+
 			_emit('open');
 		}
 
 		protected function onClose():void {
 			writable = false
 			readyState = 'closed';
+
+			clearTimeout(connectTimeoutTimer)
+			cleanup();
+
 			_emit('close');
 		}
 
@@ -98,6 +119,13 @@ package com.pnwrain.flashsocket
 
 		protected function onError(err:String):void {
 			FlashSocket.log('transport error', err);
+
+			writable = false
+			readyState = 'closed';
+
+			clearTimeout(connectTimeoutTimer)
+			cleanup();
+
 			_emit('error', err);
 		}
 	}
