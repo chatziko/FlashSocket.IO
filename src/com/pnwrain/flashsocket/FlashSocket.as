@@ -221,6 +221,8 @@ package com.pnwrain.flashsocket {
 		}
 
 		private function emitBuffered():void {
+			if(!connected) return;	// just to be sure
+
 			var i:int;
 			for (i = 0; i < _receiveBuffer.length; i++) {
 				var args:Array = _receiveBuffer[i] as Array
@@ -269,7 +271,7 @@ package com.pnwrain.flashsocket {
 		public static function log(...args):void {
 			if(!debug) return;
 
-			trace("webSocketLog: " + args.map(function(a:*, ...r):String { return JSON.stringify(a) }).join(' '));
+			trace("FlashSocket: " + args.map(function(a:*, ...r):String { return JSON.stringify(a) }).join(' '));
 
 			if(ExternalInterface.available) {
 				args.unshift('console.log');
@@ -278,11 +280,11 @@ package com.pnwrain.flashsocket {
 		}
 
 		public static function error(message:String):void {
-			trace("webSocketError: " + message);
+			trace("FlashSocket Error: " + message);
 		}
 
 		public static function fatal(message:String):void {
-			trace("webSocketError: " + message);
+			trace("FlashSocket Error: " + message);
 		}
 	}
 }

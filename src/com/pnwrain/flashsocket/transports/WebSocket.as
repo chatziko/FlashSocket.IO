@@ -38,6 +38,7 @@ package com.pnwrain.flashsocket.transports {
 			var origin:String = protocol + "://" + host.toLowerCase();
 
 			webSocket = new com.worlize.websocket.WebSocket(socketURL, origin, [protocol]);
+			webSocket.debug = FlashSocket.debug;
 
 			webSocket.addEventListener(WebSocketEvent.OPEN, onWSOpen);
 			webSocket.addEventListener(WebSocketEvent.MESSAGE, onMessage);

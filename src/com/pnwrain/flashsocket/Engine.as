@@ -241,7 +241,7 @@ package com.pnwrain.flashsocket
 			if(!('closed' != readyState && transport.writable && !upgrading && writeBuffer.length))
 				return;
 
-			FlashSocket.log('flushing ' + writeBuffer.length + ' packets in socket');
+			FlashSocket.log('flushing ' + writeBuffer.length + ' packets in socket', writeBuffer);
 
 			transport.send(writeBuffer);
 			// keep track of current length of writeBuffer
