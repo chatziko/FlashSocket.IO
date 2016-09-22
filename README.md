@@ -17,8 +17,10 @@ several improvements and bugfixes:
  * support for sending/receiving binary data (as
    [ByteArray](http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flash/utils/ByteArray.html))
  * use [my fork](https://github.com/chatziko/AS3WebSocket) of
-   [AS3WebSocket](https://github.com/theturtle32/AS3WebSocket), modified to use
-   native SecureSocket for TLS (faster, more sucure, reduces swc size by 86%)
+   [AS3WebSocket](https://github.com/theturtle32/AS3WebSocket), with the following improvements:
+   * use native SecureSocket for TLS (faster, more sucure, reduces swc size by 86%)
+   * limited support for [permessage-deflate](https://tools.ietf.org/html/draft-ietf-hybi-permessage-compression-19) compression
+     (accept compressed messages from the server, although the client never compresses itself)
  * separate engine.io client code
  * add ERROR event for handling server-side errors
  * bugfix: propertly add callback to messages for sending ACK
