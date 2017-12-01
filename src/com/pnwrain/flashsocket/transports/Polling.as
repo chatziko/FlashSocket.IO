@@ -242,6 +242,24 @@ package com.pnwrain.flashsocket.transports {
 
 		// the inverse of encodePayload
 		private function decodePayload(ba:ByteArray):Array {
+			// engine.io payload can be either binary (which can contain both binary
+			// and string packets) or utf8 string (containing only string packets).
+			// See: https://github.com/socketio/engine.io-protocol#payload
+			// For polling requests this can be decided from the response content-type
+			// ('application/octet-stream' | 'text/plain; charset=UTF-8')
+			//
+			// In flash unfortunately we cannot reliably get the content-type, so we
+			// infer it from the content itself. Binary payloads start with 0|1 flag
+			// showing if the first packet is binary or string. Utf8 payloads start
+			// with a length (as string), so the first byte is a string digit (utf8
+			// code 48-57). So if the first byte is 0|1 it must be a binary payload.
+			//
+			return ba.bytesAvailable == 0 || ba[0] <= 1
+				? decodePayloadBinary(ba)
+				: decodePayloadUtf8(ba);
+		}
+
+		private function decodePayloadBinary(ba:ByteArray):Array {
 			var packets:Array = [];
 
 			while(ba.bytesAvailable) {
@@ -262,6 +280,26 @@ package com.pnwrain.flashsocket.transports {
 				}
 
 				packets.push(decodePacket(data));
+			}
+			return packets;
+		}
+
+		private function decodePayloadUtf8(ba:ByteArray):Array {
+			// <length1>:<packet1>[<length2>:<packet2>[...]]
+			// Length is in _characters_ so we need to decode the whole payload
+			// and parse the String we get.
+			//
+			var payload:String = ba.readUTFBytes(ba.bytesAvailable);
+			var packets:Array = [];
+
+			for(var pos:int = 0; pos < payload.length; ) {
+				var c:int = payload.indexOf(":", pos);
+				var len:int = int(payload.substring(pos, c));
+				var data:String = payload.substr(c+1, len);
+
+				packets.push(decodePacket(data));
+
+				pos = c+1 + len;
 			}
 			return packets;
 		}
